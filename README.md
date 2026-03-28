@@ -29,3 +29,10 @@
 ### Linux / macOS
 ```bash
 bash <(curl -fsSL https://raw.githubusercontent.com/khongtk2004/khongai-openclaw/main/install.sh)
+
+
+### Windows (PowerShell)
+```bash
+irm https://raw.githubusercontent.com/khongtk2004/khongai-openclaw/main/install.ps1 | iex
+
+
