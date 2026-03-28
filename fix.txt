@@ -15,8 +15,8 @@ services:
       - "18789:18789"
     environment:
       - NODE_ENV=production
-      - TELEGRAM_BOT_TOKEN=8788147844:AAEkn4qy9P7ZpGu9L-n1uLPJnsI4VOr3uJ4
-      - ADMIN_USER_IDS=@khongtk,@renyu4444
+      - TELEGRAM_BOT_TOKEN=YourTokenBottelegram
+      - ADMIN_USER_IDS=YourUserNameTelegram
     command: ["gateway", "start", "--foreground"]
 EOF
 mkdir -p ~/.khongai/workspace && \
