@@ -98,7 +98,7 @@ npm install node-telegram-bot-api 2>/dev/null || true
 
 cat > bot.js << 'BOTEOF'
 const TelegramBot = require('node-telegram-bot-api');
-const token = '8788147844:AAEkn4qy9P7ZpGu9L-n1uLPJnsI4VOr3uJ4';
+const token = 'YourBotoken';
 const bot = new TelegramBot(token, { polling: true });
 console.log('🤖 KhongAI Bot Running');
 bot.onText(/\/start/, (msg) => {
