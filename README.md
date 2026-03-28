@@ -2,7 +2,7 @@
 
 <div align="center">
 
-![KhongAI Banner](https://via.placeholder.com/800x200/00a67c/ffffff?text=KhongAI+OpenClaw)
+![KhongAI Banner](https://i.pinimg.com/736x/b9/ff/56/b9ff56209b3d5156c0790e01ecde7abf.jpg)
 
 **AI Assistant with Telegram Bot Management**
 Control and configure your AI assistant via Telegram commands
