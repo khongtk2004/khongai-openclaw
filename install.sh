@@ -1,5 +1,5 @@
 #!/bin/bash
-# KhongAI Installer - Complete Fixed Version
+# KhongAI Installer - With AI Chat Integration
 
 set -e
 
@@ -129,7 +129,7 @@ create_container() {
     
     cd "$INSTALL_DIR"
     
-    # Create docker-compose.yml (without version attribute)
+    # Create docker-compose.yml
     cat > docker-compose.yml << 'EOF'
 services:
   khongai:
@@ -167,9 +167,9 @@ EOF
     fi
 }
 
-# Create Telegram bot
+# Create Telegram bot with AI chat
 create_telegram_bot() {
-    log_step "Creating Telegram bot..."
+    log_step "Creating Telegram bot with AI chat..."
     
     local bot_dir="$HOME/khongai-telegram-bot"
     mkdir -p "$bot_dir"
@@ -180,10 +180,12 @@ create_telegram_bot() {
 {
   "name": "khongai-telegram-bot",
   "version": "1.0.0",
-  "description": "KhongAI Telegram Bot",
+  "description": "KhongAI Telegram Bot with AI Chat",
   "main": "bot.js",
   "dependencies": {
-    "node-telegram-bot-api": "^0.64.0"
+    "node-telegram-bot-api": "^0.64.0",
+    "axios": "^1.6.0",
+    "node-fetch": "^3.3.2"
   }
 }
 EOF
@@ -192,74 +194,310 @@ EOF
     log_info "Installing dependencies..."
     npm install --production --silent 2>/dev/null || npm install --production
     
-    # Create bot.js
+    # Create AI chat bot
     cat > bot.js << 'BOTEOF'
 const TelegramBot = require('node-telegram-bot-api');
+const axios = require('axios');
 
-// Get token from environment or use default
-const token = process.env.TELEGRAM_BOT_TOKEN || 'YOUR_BOT_TOKEN_HERE';
+// Configuration
+const token = process.env.TELEGRAM_BOT_TOKEN;
+const KHONGAI_API = 'http://localhost:18789';
 const bot = new TelegramBot(token, { polling: true });
 
-console.log('🤖 KhongAI Bot Started');
+// Store conversation history (simple in-memory)
+const conversations = new Map();
+
+console.log('🤖 KhongAI Bot with AI Chat Started');
 console.log('Bot token: ' + token.substring(0, 10) + '...');
+console.log('API URL: ' + KHONGAI_API);
 
-// Command handlers
-bot.onText(/\/start/, (msg) => {
+// Helper: Call KhongAI API
+async function callKhongAI(message, userId) {
+    try {
+        // Get conversation history
+        let history = conversations.get(userId) || [];
+        
+        // Add user message to history
+        history.push({ role: 'user', content: message });
+        
+        // Keep last 10 messages for context
+        if (history.length > 10) {
+            history = history.slice(-10);
+        }
+        
+        // Call OpenClaw API
+        const response = await axios.post(`${KHONGAI_API}/chat`, {
+            messages: history,
+            temperature: 0.7,
+            max_tokens: 500
+        }, {
+            timeout: 30000,
+            headers: { 'Content-Type': 'application/json' }
+        });
+        
+        if (response.data && response.data.response) {
+            const aiResponse = response.data.response;
+            
+            // Add AI response to history
+            history.push({ role: 'assistant', content: aiResponse });
+            conversations.set(userId, history);
+            
+            return aiResponse;
+        } else {
+            return "I'm here! How can I help you today?";
+        }
+    } catch (error) {
+        console.error('API Error:', error.message);
+        
+        if (error.code === 'ECONNREFUSED') {
+            return "⚠️ KhongAI service is not running. Please start it with: ~/khongai-manager.sh start";
+        } else if (error.response) {
+            return `❌ API Error: ${error.response.status}\nPlease try again later.`;
+        } else {
+            return "🤖 I'm having trouble connecting. Please make sure KhongAI is running.";
+        }
+    }
+}
+
+// Helper: Check system health
+async function checkHealth() {
+    try {
+        const response = await axios.get(`${KHONGAI_API}/health`, { timeout: 5000 });
+        return response.status === 200;
+    } catch {
+        return false;
+    }
+}
+
+// Command: /start
+bot.onText(/\/start/, async (msg) => {
     const chatId = msg.chat.id;
-    const welcomeMessage = `🦙 Welcome to KhongAI! 🦙
+    const username = msg.from.first_name || msg.from.username;
+    const isHealthy = await checkHealth();
+    
+    const welcomeMessage = `🦙 *Welcome to KhongAI, ${username}!* 🦙
 
-Your AI assistant is ready to help.
+Your AI assistant is ready to chat with you!
 
-Available Commands:
+✨ *Features:*
+• 💬 Natural conversation
+• 🧠 Context-aware responses
+• ⚡ Fast replies
+• 🔒 Private & secure
+
+📋 *Commands:*
+/chat [message] - Chat with AI (or just send any message)
 /status - Check system status
 /health - Detailed health check
+/clear - Clear conversation history
 /info - Bot information
-/help - Show help
+/help - Show this help
 
-Send any command to get started!`;
+💡 *Quick start:*
+Just send me any message to start chatting!
+
+*Example:*
+"Hello, who are you?"
+"What can you help me with?"
+"Tell me a joke"
+
+${isHealthy ? '✅ System: Online' : '⚠️ System: Offline'}
+
+_Start chatting now!_ 🚀`;
     
-    bot.sendMessage(chatId, welcomeMessage);
+    bot.sendMessage(chatId, welcomeMessage, { parse_mode: 'Markdown' });
 });
 
-bot.onText(/\/status/, (msg) => {
+// Handle all text messages (AI chat)
+bot.onText(/^\/chat (.+)/, async (msg, match) => {
     const chatId = msg.chat.id;
-    bot.sendMessage(chatId, '✅ KhongAI is online and running!');
+    const message = match[1];
+    
+    bot.sendChatAction(chatId, 'typing');
+    
+    const aiResponse = await callKhongAI(message, chatId);
+    bot.sendMessage(chatId, aiResponse, { parse_mode: 'Markdown' });
 });
 
-bot.onText(/\/health/, (msg) => {
+// Handle direct messages (without command)
+bot.on('message', async (msg) => {
     const chatId = msg.chat.id;
-    bot.sendMessage(chatId, '🩺 All systems operational');
+    const text = msg.text;
+    
+    // Skip commands
+    if (!text || text.startsWith('/')) return;
+    
+    // Send typing indicator
+    bot.sendChatAction(chatId, 'typing');
+    
+    // Get AI response
+    const aiResponse = await callKhongAI(text, chatId);
+    
+    // Split long messages
+    if (aiResponse.length > 4000) {
+        for (let i = 0; i < aiResponse.length; i += 4000) {
+            bot.sendMessage(chatId, aiResponse.substring(i, i + 4000));
+        }
+    } else {
+        bot.sendMessage(chatId, aiResponse);
+    }
 });
 
+// Command: /status
+bot.onText(/\/status/, async (msg) => {
+    const chatId = msg.chat.id;
+    const isHealthy = await checkHealth();
+    
+    const statusMessage = `📊 *KhongAI System Status*
+
+${isHealthy ? '✅ Status: Online' : '❌ Status: Offline'}
+
+*Details:*
+• Service: OpenClaw Gateway
+• API: ${KHONGAI_API}
+• Bot: Active
+
+*Commands:*
+/health - Detailed health check
+/info - Bot information
+/clear - Clear conversation history
+
+${isHealthy ? '🟢 System is operational' : '🔴 System is down. Run: ~/khongai-manager.sh start'}`;
+    
+    bot.sendMessage(chatId, statusMessage, { parse_mode: 'Markdown' });
+});
+
+// Command: /health
+bot.onText(/\/health/, async (msg) => {
+    const chatId = msg.chat.id;
+    
+    bot.sendMessage(chatId, '🩺 *Checking system health...*', { parse_mode: 'Markdown' });
+    
+    try {
+        const response = await axios.get(`${KHONGAI_API}/health`, { timeout: 5000 });
+        
+        const healthMessage = `✅ *Health Check Passed*
+
+*Status:* Healthy
+*HTTP Code:* ${response.status}
+*Response Time:* < 5s
+
+*System Info:*
+• API: Responding
+• Bot: Active
+• Memory: ${Math.round(process.memoryUsage().heapUsed / 1024 / 1024)}MB used
+
+All systems operational! 🟢`;
+        
+        bot.sendMessage(chatId, healthMessage, { parse_mode: 'Markdown' });
+    } catch (error) {
+        const errorMessage = `❌ *Health Check Failed*
+
+*Error:* ${error.code || error.message}
+*Status:* Unreachable
+
+*Troubleshooting:*
+1. Check Docker: \`docker ps\`
+2. View logs: \`~/khongai-manager.sh logs\`
+3. Restart: \`~/khongai-manager.sh restart\`
+
+Contact @khongtk2004 for support.`;
+        
+        bot.sendMessage(chatId, errorMessage, { parse_mode: 'Markdown' });
+    }
+});
+
+// Command: /clear
+bot.onText(/\/clear/, (msg) => {
+    const chatId = msg.chat.id;
+    conversations.delete(chatId);
+    bot.sendMessage(chatId, '🗑️ *Conversation history cleared!*\n\nYou can start a fresh conversation now.', { parse_mode: 'Markdown' });
+});
+
+// Command: /info
 bot.onText(/\/info/, (msg) => {
     const chatId = msg.chat.id;
-    const info = `📊 KhongAI Information
-
-Version: 1.0.0
-Status: Online
-Type: AI Assistant
-
-Commands:
-/start - Welcome message
-/status - System status
-/health - Health check
-/info - Bot information
-/help - Help menu`;
     
-    bot.sendMessage(chatId, info);
+    const infoMessage = `📊 *KhongAI Information*
+
+*Version:* 1.0.0
+*Type:* AI Assistant with Telegram Integration
+*API:* OpenClaw Gateway
+
+*Features:*
+• AI Chat with context
+• Multi-user support
+• Conversation history
+• Health monitoring
+
+*Commands:* /start, /status, /health, /clear, /info, /help
+
+*Links:*
+• GitHub: @khongtk2004
+• Support: @khongtk2004
+
+*Stats:*
+• Uptime: ${Math.round(process.uptime())} seconds
+• Active conversations: ${conversations.size}
+• Node version: ${process.version}`;
+    
+    bot.sendMessage(chatId, infoMessage, { parse_mode: 'Markdown' });
 });
 
+// Command: /help
 bot.onText(/\/help/, (msg) => {
     const chatId = msg.chat.id;
-    bot.sendMessage(chatId, 'Send /start to see available commands');
+    
+    const helpMessage = `📚 *KhongAI Help Guide*
+
+*Chat Commands:*
+• \`/chat [message]\` - Chat with AI
+• \`Just send any message\` - Direct chat
+
+*System Commands:*
+• \`/status\` - Check system status
+• \`/health\` - Detailed health check
+• \`/clear\` - Clear conversation history
+• \`/info\` - Bot information
+• \`/help\` - Show this help
+
+*Tips:*
+💡 The AI remembers context from your conversation
+💡 Use /clear to start fresh
+💡 Long responses are automatically split
+
+*Examples:*
+"Tell me about AI"
+"What's the weather like?"
+"Explain quantum computing"
+"Tell me a fun fact"
+
+*Need help?* Contact @khongtk2004
+
+Start chatting now! 🚀`;
+    
+    bot.sendMessage(chatId, helpMessage, { parse_mode: 'Markdown' });
 });
 
 // Error handling
 bot.on('polling_error', (error) => {
-    console.log('Polling error:', error.message);
+    console.error('Polling error:', error.message);
+    if (error.message.includes('ETELEGRAM')) {
+        console.log('Bot token might be invalid. Please check your token.');
+    }
 });
 
-console.log('Bot is ready! Send /start to your bot on Telegram');
+process.on('uncaughtException', (error) => {
+    console.error('Uncaught exception:', error);
+});
+
+process.on('unhandledRejection', (error) => {
+    console.error('Unhandled rejection:', error);
+});
+
+console.log('🚀 Bot is ready!');
+console.log('💡 Send /start to your bot on Telegram');
+console.log('✨ AI chat is now active!');
 BOTEOF
     
     # Create start script
@@ -276,6 +514,14 @@ pkill -f "node bot.js" 2>/dev/null
 nohup node bot.js > bot.log 2>&1 &
 echo $! > bot.pid
 echo "Bot started with PID: $(cat bot.pid)"
+sleep 2
+if pgrep -f "node bot.js" > /dev/null; then
+    echo "✅ Bot is running!"
+    tail -5 bot.log
+else
+    echo "❌ Bot failed to start"
+    cat bot.log
+fi
 EOF
     
     chmod +x start.sh
@@ -294,7 +540,7 @@ EOF
     
     chmod +x stop.sh
     
-    log_success "Telegram bot created"
+    log_success "Telegram bot with AI chat created"
 }
 
 # Create management script
@@ -338,12 +584,20 @@ show_status() {
     else
         echo -e "${RED}✗ Not responding${NC}"
     fi
+    
+    # Active conversations
+    if pgrep -f "node bot.js" > /dev/null; then
+        echo -e "\n${BOLD}💬 Active Conversations:${NC}"
+        tail -20 ~/khongai-telegram-bot/bot.log | grep -c "Message from" || echo "0"
+    fi
 }
 
 case "$1" in
     start)
         echo -e "${BLUE}Starting KhongAI...${NC}"
         cd ~/khongai && docker compose up -d
+        sleep 3
+        cd ~/khongai-telegram-bot && ./start.sh "$(cat ~/.khongai/bot-token.txt 2>/dev/null)"
         echo -e "${GREEN}✓ KhongAI started${NC}"
         ;;
     stop)
@@ -361,7 +615,7 @@ case "$1" in
         show_status
         ;;
     logs)
-        docker logs khongai --tail 50
+        docker logs khongai --tail 50 -f
         ;;
     bot-start)
         cd ~/khongai-telegram-bot
@@ -377,11 +631,23 @@ case "$1" in
     bot-logs)
         tail -f ~/khongai-telegram-bot/bot.log
         ;;
+    bot-restart)
+        $0 bot-stop
+        sleep 2
+        $0 bot-start
+        ;;
     health)
         curl -s http://localhost:18789/health | python3 -m json.tool 2>/dev/null || curl -s http://localhost:18789/health
         ;;
+    test)
+        echo -e "${BLUE}Testing AI Chat...${NC}"
+        curl -X POST http://localhost:18789/chat \
+            -H "Content-Type: application/json" \
+            -d '{"messages":[{"role":"user","content":"Hello"}],"temperature":0.7}' \
+            2>/dev/null | python3 -m json.tool 2>/dev/null || echo "API not responding"
+        ;;
     *)
-        echo "Usage: $0 {start|stop|restart|status|logs|bot-start|bot-stop|bot-logs|health}"
+        echo "Usage: $0 {start|stop|restart|status|logs|bot-start|bot-stop|bot-restart|bot-logs|health|test}"
         exit 1
         ;;
 esac
@@ -482,19 +748,26 @@ EOF
     
     # Final output
     echo -e "\n${GREEN}════════════════════════════════════════════════════════════════${NC}"
-    echo -e "${GREEN}✅ KhongAI installed successfully!${NC}"
+    echo -e "${GREEN}✅ KhongAI with AI Chat installed successfully!${NC}"
     echo -e "${GREEN}════════════════════════════════════════════════════════════════${NC}\n"
     
     echo -e "${CYAN}📊 Dashboard:${NC} http://localhost:18789"
-    echo -e "${CYAN}🤖 Telegram Bot:${NC} Send /start to your bot"
+    echo -e "${CYAN}🤖 Telegram Bot:${NC} Send any message to chat with AI"
     echo -e "${CYAN}👤 Admin:${NC} @${TELEGRAM_USERNAME:-Not set}\n"
     
     echo -e "${BOLD}📝 Management Commands:${NC}"
-    echo -e "  ${YELLOW}~/khongai-manager.sh status${NC}      - Check status"
-    echo -e "  ${YELLOW}~/khongai-manager.sh restart${NC}     - Restart everything"
-    echo -e "  ${YELLOW}~/khongai-manager.sh logs${NC}        - View container logs"
-    echo -e "  ${YELLOW}~/khongai-manager.sh bot-logs${NC}    - View bot logs"
-    echo -e "  ${YELLOW}~/khongai-manager.sh health${NC}      - Check API health\n"
+    echo -e "  ${YELLOW}~/khongai-manager.sh status${NC}       - Check status"
+    echo -e "  ${YELLOW}~/khongai-manager.sh restart${NC}      - Restart everything"
+    echo -e "  ${YELLOW}~/khongai-manager.sh logs${NC}         - View container logs"
+    echo -e "  ${YELLOW}~/khongai-manager.sh bot-logs${NC}     - View bot logs"
+    echo -e "  ${YELLOW}~/khongai-manager.sh test${NC}         - Test AI chat API"
+    echo -e "  ${YELLOW}~/khongai-manager.sh health${NC}       - Check API health\n"
+    
+    echo -e "${BOLD}💬 Telegram Bot Features:${NC}"
+    echo -e "  • Send any message to chat with AI"
+    echo -e "  • Commands: /start, /status, /health, /clear, /info"
+    echo -e "  • AI remembers conversation context"
+    echo -e "  • Supports long responses\n"
     
     echo -e "${BOLD}🔧 Directories:${NC}"
     echo -e "  KhongAI: ${YELLOW}~/khongai${NC}"
@@ -512,7 +785,9 @@ EOF
     
     if pgrep -f "node bot.js" > /dev/null; then
         log_success "Telegram bot is running!"
-        echo -e "\n${GREEN}🎉 Send /start to your Telegram bot to begin!${NC}\n"
+        echo -e "\n${GREEN}🎉 Send any message to your Telegram bot to start chatting with AI!${NC}\n"
+        echo -e "${CYAN}Example:${NC} \"Hello! Who are you?\""
+        echo -e "${CYAN}Commands:${NC} /start, /status, /health, /clear\n"
     else
         log_warning "Bot not running. Start with: ~/khongai-manager.sh bot-start"
     fi
