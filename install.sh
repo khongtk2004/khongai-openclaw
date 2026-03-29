@@ -64,8 +64,7 @@ get_api_keys() {
         exit 1
     fi
 
-    # Skip test to avoid hanging
-    log_info "Groq API key saved (testing skipped for faster install)"
+    log_success "Groq API Key saved"
 
     # Model selection
     echo -e "\n${BOLD}${CYAN}🤖 Groq Model Selection${NC}\n"
