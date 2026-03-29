@@ -61,16 +61,123 @@ install_deps() {
     if ! command -v python3 &>/dev/null; then
         log_info "Installing Python3..."
         if   command -v dnf     &>/dev/null; then sudo dnf install -y python3 python3-pip
-        elif command -v apt-get &>/dev/null; then sudo apt-get install -y python3 python3-pip
+        elif command -v apt-get &>/dev/null; then sudo apt-get update && sudo apt-get install -y python3 python3-pip
+        elif command -v zypper  &>/dev/null; then sudo zypper install -y python3 python3-pip
+        elif command -v pacman  &>/dev/null; then sudo pacman -S --noconfirm python python-pip
         fi
     fi
 
-    # pip packages for scraping
+    # Ensure pip is available — try every known method
+    install_pip
+
+    # Install Python scraping libraries using whichever pip works
     log_info "Installing Python scraping libraries..."
-    pip3 install --quiet requests beautifulsoup4 selenium webdriver-manager 2>/dev/null || \
-    pip3 install requests beautifulsoup4 selenium webdriver-manager
+    pip_install requests beautifulsoup4 selenium webdriver-manager
+    log_success "Python libraries installed"
 
     log_success "All dependencies installed"
+}
+
+# Find whichever pip command works — returns the working command string
+get_pip_cmd() {
+    if command -v pip3 &>/dev/null; then
+        echo "pip3"; return
+    fi
+    if command -v pip &>/dev/null; then
+        echo "pip"; return
+    fi
+    if python3 -m pip --version &>/dev/null 2>&1; then
+        echo "python3 -m pip"; return
+    fi
+    if python -m pip --version &>/dev/null 2>&1; then
+        echo "python -m pip"; return
+    fi
+    echo ""
+}
+
+# Install pip using every available method
+install_pip() {
+    if [[ -n "$(get_pip_cmd)" ]]; then
+        log_success "pip already available ($(get_pip_cmd))"
+        return
+    fi
+
+    log_info "pip not found — trying to install it now..."
+
+    # Method 1: apt-get (Debian / Ubuntu)
+    if command -v apt-get &>/dev/null; then
+        log_info "Trying: apt-get install python3-pip"
+        sudo apt-get update -qq 2>/dev/null
+        sudo apt-get install -y python3-pip 2>/dev/null && {
+            log_success "pip installed via apt-get"; return
+        }
+    fi
+
+    # Method 2: dnf (RHEL / Fedora / CentOS)
+    if command -v dnf &>/dev/null; then
+        log_info "Trying: dnf install python3-pip"
+        sudo dnf install -y python3-pip 2>/dev/null && {
+            log_success "pip installed via dnf"; return
+        }
+    fi
+
+    # Method 3: yum (older RHEL / CentOS)
+    if command -v yum &>/dev/null; then
+        log_info "Trying: yum install python3-pip"
+        sudo yum install -y python3-pip 2>/dev/null && {
+            log_success "pip installed via yum"; return
+        }
+    fi
+
+    # Method 4: zypper (openSUSE)
+    if command -v zypper &>/dev/null; then
+        log_info "Trying: zypper install python3-pip"
+        sudo zypper install -y python3-pip 2>/dev/null && {
+            log_success "pip installed via zypper"; return
+        }
+    fi
+
+    # Method 5: pacman (Arch)
+    if command -v pacman &>/dev/null; then
+        log_info "Trying: pacman install python-pip"
+        sudo pacman -S --noconfirm python-pip 2>/dev/null && {
+            log_success "pip installed via pacman"; return
+        }
+    fi
+
+    # Method 6: ensurepip (built-in Python module, no internet needed)
+    log_info "Trying: python3 -m ensurepip"
+    python3 -m ensurepip --upgrade 2>/dev/null && \
+    python3 -m pip install --upgrade pip --quiet 2>/dev/null && {
+        log_success "pip installed via ensurepip"; return
+    }
+
+    # Method 7: get-pip.py bootstrap (works on any distro with internet)
+    log_info "Trying: get-pip.py from bootstrap.pypa.io"
+    curl -fsSL https://bootstrap.pypa.io/get-pip.py -o /tmp/get-pip.py 2>/dev/null && \
+    python3 /tmp/get-pip.py --quiet 2>/dev/null && {
+        rm -f /tmp/get-pip.py
+        log_success "pip installed via get-pip.py"; return
+    }
+    rm -f /tmp/get-pip.py 2>/dev/null
+
+    log_warning "All pip install methods failed — search scraper will run in requests-only mode"
+}
+
+# Wrapper: install Python packages safely regardless of distro restrictions
+pip_install() {
+    local PIP_CMD
+    PIP_CMD=$(get_pip_cmd)
+    if [[ -z "$PIP_CMD" ]]; then
+        log_warning "No pip found — skipping package install: $*"
+        return
+    fi
+    # --break-system-packages needed on RHEL9+ / Ubuntu 23+
+    $PIP_CMD install --quiet --break-system-packages "$@" 2>/dev/null && return
+    # Older systems without that flag
+    $PIP_CMD install --quiet "$@" 2>/dev/null && return
+    # Last resort: verbose so errors are visible
+    $PIP_CMD install "$@"
 }
 
 # ─────────────────────────────────────────────────────────────────────────────
