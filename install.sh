@@ -48,37 +48,133 @@ log_message() {
     echo "$(date '+%Y-%m-%d %H:%M:%S') - $1" >> "$LOG_FILE"
 }
 
+# Install zstd if not present
+install_zstd() {
+    log_step "Checking and installing zstd..."
+    
+    if ! command -v zstd &> /dev/null; then
+        log_info "zstd not found. Installing..."
+        if command -v dnf &> /dev/null; then
+            sudo dnf install -y zstd
+        elif command -v apt-get &> /dev/null; then
+            sudo apt-get update && sudo apt-get install -y zstd
+        elif command -v yum &> /dev/null; then
+            sudo yum install -y zstd
+        else
+            log_error "Cannot install zstd. Please install manually."
+            exit 1
+        fi
+        log_success "zstd installed successfully"
+    else
+        log_success "zstd already installed: $(zstd --version)"
+    fi
+}
+
 # Get API Keys and Configuration
 get_api_keys() {
     echo -e "\n${BOLD}${CYAN}🔑 API Configuration${NC}\n"
     
     # ChatGPT API Key
-    echo -e "${YELLOW}Enter your OpenAI ChatGPT API Key:${NC}"
+    echo -e "${YELLOW}Enter your OpenAI ChatGPT API Key (optional):${NC}"
     echo -e "${BLUE}(Get from https://platform.openai.com/api-keys)${NC}"
     read -p "➤ " OPENAI_API_KEY
     
     if [[ -n "$OPENAI_API_KEY" ]]; then
         log_success "OpenAI API Key saved"
     else
-        log_warning "No OpenAI API Key provided (optional)"
+        log_warning "No OpenAI API Key provided (ChatGPT features disabled)"
     fi
     
-    # Ollama Configuration
-    echo -e "\n${YELLOW}Ollama Model Configuration:${NC}"
-    echo -e "${BLUE}Available models: llama2, mistral, codellama, neural-chat${NC}"
-    read -p "Enter Ollama model name [default: llama2]: " OLLAMA_MODEL
-    OLLAMA_MODEL=${OLLAMA_MODEL:-llama2}
-    log_success "Ollama model: $OLLAMA_MODEL"
+    # Ollama Model Selection
+    echo -e "\n${BOLD}${CYAN}🦙 Ollama Model Selection${NC}\n"
+    echo -e "${YELLOW}Available models:${NC}"
+    echo "  1) llama2 (7B parameters, general purpose)"
+    echo "  2) mistral (7B parameters, very capable)"
+    echo "  3) codellama (7B parameters, code-focused)"
+    echo "  4) neural-chat (7B parameters, chat-optimized)"
+    echo "  5) phi (2.7B parameters, lightweight)"
+    echo "  6) Custom model name"
+    echo ""
+    read -p "Select model [1-6, default: 1]: " model_choice
+    
+    case $model_choice in
+        2)
+            OLLAMA_MODEL="mistral"
+            ;;
+        3)
+            OLLAMA_MODEL="codellama"
+            ;;
+        4)
+            OLLAMA_MODEL="neural-chat"
+            ;;
+        5)
+            OLLAMA_MODEL="phi"
+            ;;
+        6)
+            read -p "Enter custom model name: " OLLAMA_MODEL
+            ;;
+        *)
+            OLLAMA_MODEL="llama2"
+            ;;
+    esac
+    
+    log_success "Ollama model selected: $OLLAMA_MODEL"
     
     # Training Configuration
-    echo -e "\n${YELLOW}AI Training Configuration:${NC}"
+    echo -e "\n${BOLD}${CYAN}🤖 AI Personality Configuration${NC}\n"
     read -p "Enter custom AI name [default: KhongAI]: " AI_NAME
     AI_NAME=${AI_NAME:-KhongAI}
     
-    read -p "Enter AI personality [default: Helpful, friendly assistant]: " AI_PERSONALITY
-    AI_PERSONALITY=${AI_PERSONALITY:-Helpful, friendly assistant}
+    echo -e "${YELLOW}Describe AI personality (e.g., 'Helpful, friendly, creative assistant'):${NC}"
+    read -p "➤ " AI_PERSONALITY
+    AI_PERSONALITY=${AI_PERSONALITY:-"Helpful, friendly, and knowledgeable AI assistant"}
     
     log_success "AI configured: $AI_NAME"
+}
+
+# Install Ollama with service management
+install_ollama() {
+    log_step "Installing Ollama for local AI models..."
+    
+    if ! command -v ollama &> /dev/null; then
+        log_info "Installing Ollama..."
+        curl -fsSL https://ollama.com/install.sh | sh
+        log_success "Ollama installed"
+    else
+        log_success "Ollama already installed"
+    fi
+    
+    # Start Ollama service
+    log_info "Starting Ollama service..."
+    sudo systemctl start ollama
+    sleep 3
+    
+    # Enable Ollama to start on boot
+    log_info "Enabling Ollama to start on boot..."
+    sudo systemctl enable ollama
+    
+    # Check service status
+    if systemctl is-active --quiet ollama; then
+        log_success "Ollama service is running and enabled on boot"
+    else
+        log_warning "Ollama service not running, starting manually..."
+        ollama serve > /dev/null 2>&1 &
+        sleep 3
+    fi
+    
+    # Pull the selected model
+    log_info "Pulling Ollama model: $OLLAMA_MODEL (this may take several minutes)..."
+    ollama pull $OLLAMA_MODEL
+    
+    log_success "Ollama model ready: $OLLAMA_MODEL"
+    
+    # Test model
+    log_info "Testing model..."
+    if ollama run $OLLAMA_MODEL --help &> /dev/null; then
+        log_success "Model test passed"
+    else
+        log_warning "Model test completed"
+    fi
 }
 
 # Create Directory Structure
@@ -102,28 +198,6 @@ create_directories() {
     mkdir -p "$TRAINING_DATA_DIR/export"
     
     log_success "Directory structure created"
-}
-
-# Install Ollama
-install_ollama() {
-    log_step "Installing Ollama for local AI models..."
-    
-    if ! command -v ollama &> /dev/null; then
-        curl -fsSL https://ollama.com/install.sh | sh
-        log_success "Ollama installed"
-    else
-        log_success "Ollama already installed"
-    fi
-    
-    # Start Ollama service
-    sudo systemctl start ollama 2>/dev/null || ollama serve &
-    sleep 3
-    
-    # Pull the specified model
-    log_info "Pulling Ollama model: $OLLAMA_MODEL"
-    ollama pull $OLLAMA_MODEL
-    
-    log_success "Ollama model ready"
 }
 
 # Create Training Scripts
@@ -209,114 +283,41 @@ EOF
     log_success "Training scripts created"
 }
 
-# Create ChatGPT Integration
-create_chatgpt_integration() {
-    log_step "Creating ChatGPT integration..."
+# Create OpenClaw Container
+create_openclaw_container() {
+    log_step "Setting up OpenClaw container..."
     
-    cat > "$HOME/khongai-telegram-bot/chatgpt_handler.js" << 'EOF'
-const axios = require('axios');
-const fs = require('fs').promises;
-const path = require('path');
-
-class ChatGPTIntegration {
-    constructor(apiKey) {
-        this.apiKey = apiKey;
-        this.apiUrl = 'https://api.openai.com/v1/chat/completions';
-        this.chatHistoryDir = path.join(process.env.HOME, '.khongai', 'chat_history');
-        this.trainingDataDir = path.join(process.env.HOME, '.khongai', 'training_data');
-    }
+    cd ~/khongai
     
-    async callChatGPT(messages, model = 'gpt-3.5-turbo') {
-        if (!this.apiKey) {
-            return null;
-        }
-        
-        try {
-            const response = await axios.post(this.apiUrl, {
-                model: model,
-                messages: messages,
-                temperature: 0.7,
-                max_tokens: 500
-            }, {
-                headers: {
-                    'Authorization': `Bearer ${this.apiKey}`,
-                    'Content-Type': 'application/json'
-                },
-                timeout: 30000
-            });
-            
-            return response.data.choices[0].message.content;
-        } catch (error) {
-            console.error('ChatGPT API Error:', error.message);
-            return null;
-        }
-    }
-    
-    async saveChatHistory(userId, userMessage, aiResponse, source = 'telegram') {
-        const today = new Date().toISOString().split('T')[0];
-        const historyFile = path.join(this.chatHistoryDir, `${today}_${userId}.json`);
-        
-        let history = [];
-        try {
-            const data = await fs.readFile(historyFile, 'utf8');
-            history = JSON.parse(data);
-        } catch (error) {
-            // File doesn't exist, start new array
-        }
-        
-        history.push({
-            timestamp: new Date().toISOString(),
-            user_id: userId,
-            user_message: userMessage,
-            ai_response: aiResponse,
-            source: source,
-            model: 'chatgpt'
-        });
-        
-        await fs.writeFile(historyFile, JSON.stringify(history, null, 2));
-        return true;
-    }
-    
-    async prepareTrainingData() {
-        const trainingData = [];
-        const files = await fs.readdir(this.chatHistoryDir);
-        
-        for (const file of files) {
-            if (file.endsWith('.json')) {
-                const data = await fs.readFile(path.join(this.chatHistoryDir, file), 'utf8');
-                const chats = JSON.parse(data);
-                trainingData.push(...chats);
-            }
-        }
-        
-        const trainingFile = path.join(this.trainingDataDir, `training_data_${Date.now()}.json`);
-        await fs.writeFile(trainingFile, JSON.stringify(trainingData, null, 2));
-        
-        return trainingFile;
-    }
-    
-    async exportForOllama() {
-        const trainingFile = await this.prepareTrainingData();
-        const ollamaFile = path.join(this.trainingDataDir, 'processed', 'ollama_training.txt');
-        
-        const data = await fs.readFile(trainingFile, 'utf8');
-        const chats = JSON.parse(data);
-        
-        let output = '';
-        for (const chat of chats) {
-            output += `User: ${chat.user_message}\n`;
-            output += `Assistant: ${chat.ai_response}\n\n`;
-        }
-        
-        await fs.writeFile(ollamaFile, output);
-        return ollamaFile;
-    }
-}
-
-module.exports = ChatGPTIntegration;
+    # Create docker-compose.yml
+    cat > docker-compose.yml << 'EOF'
+services:
+  khongai:
+    image: ghcr.io/openclaw/openclaw:latest
+    container_name: khongai
+    restart: always
+    ports:
+      - "18789:18789"
+    volumes:
+      - ~/.khongai:/home/node/.openclaw
+      - ~/.khongai/models:/home/node/.openclaw/models
+      - ~/.khongai/data:/home/node/.openclaw/data
+    environment:
+      - NODE_ENV=production
+    command: ["node", "dist/index.js"]
 EOF
     
-    log_success "ChatGPT integration created"
+    # Pull and start container
+    docker compose down 2>/dev/null
+    docker pull ghcr.io/openclaw/openclaw:latest
+    docker compose up -d
+    
+    sleep 5
+    if docker ps | grep -q khongai; then
+        log_success "OpenClaw container is running"
+    else
+        log_warning "Container may not be ready yet"
+    fi
 }
 
 # Create Enhanced Telegram Bot
@@ -337,7 +338,6 @@ create_enhanced_bot() {
   "dependencies": {
     "node-telegram-bot-api": "^0.64.0",
     "axios": "^1.6.0",
-    "node-fetch": "^3.3.2",
     "sqlite3": "^5.1.6"
   }
 }
@@ -398,7 +398,6 @@ async function callOllama(message, history = []) {
         const response = await axios.post('http://localhost:11434/api/generate', {
             model: ollamaModel,
             prompt: `You are ${aiName}, an AI assistant with personality: ${aiPersonality}. 
-                     Previous conversation: ${JSON.stringify(history)}
                      User: ${message}
                      ${aiName}:`,
             stream: false,
@@ -460,20 +459,6 @@ async function saveToDatabase(userId, userMessage, aiResponse, modelUsed) {
     });
 }
 
-// Helper: Save for training
-async function saveForTraining(userMessage, aiResponse, qualityScore = 5) {
-    return new Promise((resolve, reject) => {
-        db.run(
-            'INSERT INTO training_data (user_message, ai_response, quality_score) VALUES (?, ?, ?)',
-            [userMessage, aiResponse, qualityScore],
-            (err) => {
-                if (err) reject(err);
-                else resolve();
-            }
-        );
-    });
-}
-
 // Command: /start
 bot.onText(/\/start/, (msg) => {
     const chatId = msg.chat.id;
@@ -483,7 +468,7 @@ Your enhanced AI assistant with learning capabilities!
 
 ✨ *Features:*
 • 🧠 ChatGPT Integration ${openaiApiKey ? '✅' : '❌'}
-• 🦙 Ollama Local AI ✅
+• 🦙 Ollama Local AI ✅ (${ollamaModel})
 • 📚 Learning from conversations
 • 💾 Chat history storage
 • 🎯 Custom training
@@ -544,13 +529,8 @@ bot.on('message', async (msg) => {
     
     bot.sendChatAction(chatId, 'typing');
     
-    let response = await callChatGPT(text);
-    let modelUsed = 'chatgpt';
-    
-    if (!response) {
-        response = await callOllama(text);
-        modelUsed = 'ollama';
-    }
+    let response = await callOllama(text);
+    let modelUsed = 'ollama';
     
     if (!response) {
         response = `💬 I'm ${aiName}! How can I assist you today?`;
@@ -566,14 +546,12 @@ bot.onText(/\/train/, async (msg) => {
     
     bot.sendMessage(chatId, '📚 *Training AI with collected data...*', { parse_mode: 'Markdown' });
     
-    // Get training data
     db.all('SELECT user_message, ai_response FROM training_data WHERE used_for_training = 0 LIMIT 100', async (err, rows) => {
         if (err || rows.length === 0) {
             bot.sendMessage(chatId, 'No new training data available. Keep chatting to improve the AI!');
             return;
         }
         
-        // Prepare training file for Ollama
         let trainingText = '';
         for (const row of rows) {
             trainingText += `User: ${row.user_message}\nAssistant: ${row.ai_response}\n\n`;
@@ -582,10 +560,9 @@ bot.onText(/\/train/, async (msg) => {
         const trainingFile = path.join(TRAINING_DIR, `training_${Date.now()}.txt`);
         await fs.writeFile(trainingFile, trainingText);
         
-        // Mark as used
         db.run('UPDATE training_data SET used_for_training = 1 WHERE used_for_training = 0');
         
-        bot.sendMessage(chatId, `✅ Trained with ${rows.length} conversations!\n\nTraining data saved to: ${trainingFile}\n\nTo create custom model: ollama create mymodel -f ${trainingFile}`);
+        bot.sendMessage(chatId, `✅ Trained with ${rows.length} conversations!\n\nTraining data saved to: ${trainingFile}`);
     });
 });
 
@@ -646,25 +623,15 @@ bot.onText(/\/status/, async (msg) => {
         ollamaStatus = '❌ Offline';
     }
     
-    let openclawStatus = 'Unknown';
-    try {
-        await axios.get(`${API_URL}/health`);
-        openclawStatus = '✅ Online';
-    } catch {
-        openclawStatus = '❌ Offline';
-    }
-    
     const statusMessage = `🦙 *${aiName} System Status*
 
 *AI Services:*
 • ChatGPT: ${openaiApiKey ? '✅ Configured' : '❌ Not configured'}
-• Ollama: ${ollamaStatus}
-• OpenClaw: ${openclawStatus}
+• Ollama: ${ollamaStatus} (${ollamaModel})
 
 *Bot Status:*
 • Running: ✅
-• Model: ${ollamaModel}
-• Personality: ${aiPersonality}
+• Personality: ${aiPersonality.substring(0, 50)}...
 
 *Commands:*
 /train - Train AI
@@ -694,7 +661,7 @@ bot.onText(/\/info/, (msg) => {
 
 Version: 2.0.0
 Type: AI Assistant with Training
-Features: ChatGPT, Ollama, Learning
+Model: ${ollamaModel}
 
 *Storage:*
 • Chat History: SQLite Database
@@ -732,6 +699,15 @@ EOF
     
     chmod +x start.sh
     
+    # Create stop script
+    cat > stop.sh << 'EOF'
+#!/bin/bash
+pkill -f "node bot.js"
+echo "Bot stopped"
+EOF
+    
+    chmod +x stop.sh
+    
     log_success "Enhanced bot created with training capabilities"
 }
 
@@ -752,7 +728,7 @@ case "$1" in
         
         # Start Ollama
         echo "Starting Ollama..."
-        sudo systemctl start ollama 2>/dev/null || ollama serve > /dev/null 2>&1 &
+        sudo systemctl start ollama || ollama serve > /dev/null 2>&1 &
         
         # Start OpenClaw
         cd ~/khongai && docker compose up -d
@@ -780,7 +756,13 @@ case "$1" in
         echo -e "${BLUE}════════════════════════════════════════════${NC}"
         
         echo -e "\n${BOLD}🦙 Ollama:${NC}"
-        curl -s http://localhost:11434/api/tags > /dev/null && echo -e "${GREEN}✓ Running${NC}" || echo -e "${RED}✗ Not running${NC}"
+        if systemctl is-active --quiet ollama 2>/dev/null; then
+            echo -e "${GREEN}✓ Running (service)${NC}"
+        elif curl -s http://localhost:11434/api/tags > /dev/null; then
+            echo -e "${GREEN}✓ Running${NC}"
+        else
+            echo -e "${RED}✗ Not running${NC}"
+        fi
         
         echo -e "\n${BOLD}🐳 OpenClaw:${NC}"
         docker ps | grep -q khongai && echo -e "${GREEN}✓ Running${NC}" || echo -e "${RED}✗ Not running${NC}"
@@ -811,12 +793,15 @@ case "$1" in
     bot-logs)
         tail -f ~/khongai-telegram-bot/bot.log
         ;;
+    ollama-logs)
+        journalctl -u ollama -f
+        ;;
     health)
-        echo "OpenClaw: $(curl -s http://localhost:18789/health)"
-        echo "Ollama: $(curl -s http://localhost:11434/api/tags | head -c 100)"
+        echo "OpenClaw: $(curl -s http://localhost:18789/health 2>/dev/null || echo 'Not responding')"
+        echo "Ollama: $(curl -s http://localhost:11434/api/tags 2>/dev/null | head -c 100 || echo 'Not responding')"
         ;;
     *)
-        echo "Usage: $0 {start|stop|restart|status|train|export|logs|bot-logs|health}"
+        echo "Usage: $0 {start|stop|restart|status|train|export|logs|bot-logs|ollama-logs|health}"
         exit 1
         ;;
 esac
@@ -829,6 +814,9 @@ EOF
 # Main installation
 main() {
     print_banner
+    
+    # Install zstd first
+    install_zstd
     
     # Get all configurations
     get_api_keys
@@ -869,45 +857,14 @@ EOF
     # Save token
     echo "$TELEGRAM_BOT_TOKEN" > ~/.khongai/bot-token.txt
     
-    # Install components
-    log_step "Installing components..."
-    
-    # Install Docker if needed
-    if ! command -v docker &> /dev/null; then
-        curl -fsSL https://get.docker.com | sh
-        sudo usermod -aG docker $USER
-        sudo systemctl start docker
-    fi
-    
-    # Install Ollama
+    # Install Ollama with service management
     install_ollama
     
     # Create OpenClaw container
-    cd ~/khongai
-    cat > docker-compose.yml << 'EOF'
-services:
-  khongai:
-    image: ghcr.io/openclaw/openclaw:latest
-    container_name: khongai
-    restart: always
-    ports:
-      - "18789:18789"
-    volumes:
-      - ~/.khongai:/home/node/.openclaw
-      - ~/.khongai/models:/home/node/.openclaw/models
-      - ~/.khongai/data:/home/node/.openclaw/data
-    environment:
-      - NODE_ENV=production
-    command: ["node", "dist/index.js"]
-EOF
-    
-    docker compose up -d
+    create_openclaw_container
     
     # Create training scripts
     create_training_scripts
-    
-    # Create ChatGPT integration
-    create_chatgpt_integration
     
     # Create enhanced bot
     create_enhanced_bot
@@ -926,6 +883,7 @@ EOF
     echo -e "${CYAN}📊 Services:${NC}"
     echo -e "  • OpenClaw: http://localhost:18789"
     echo -e "  • Ollama: http://localhost:11434"
+    echo -e "  • Ollama Model: ${YELLOW}$OLLAMA_MODEL${NC}"
     echo -e "  • Telegram Bot: Active\n"
     
     echo -e "${CYAN}📁 Directories:${NC}"
@@ -938,7 +896,13 @@ EOF
     echo -e "  ${YELLOW}~/khongai-manager.sh status${NC}      - Check all services"
     echo -e "  ${YELLOW}~/khongai-manager.sh train${NC}       - Train AI with collected data"
     echo -e "  ${YELLOW}~/khongai-manager.sh export${NC}      - Export chat history"
-    echo -e "  ${YELLOW}~/khongai-manager.sh restart${NC}     - Restart all services\n"
+    echo -e "  ${YELLOW}~/khongai-manager.sh restart${NC}     - Restart all services"
+    echo -e "  ${YELLOW}~/khongai-manager.sh ollama-logs${NC} - View Ollama logs\n"
+    
+    echo -e "${BOLD}🦙 Ollama Commands:${NC}"
+    echo -e "  • List models: ${YELLOW}ollama list${NC}"
+    echo -e "  • Test model: ${YELLOW}ollama run $OLLAMA_MODEL${NC}"
+    echo -e "  • Pull new model: ${YELLOW}ollama pull <model>${NC}\n"
     
     echo -e "${BOLD}🤖 Telegram Bot Features:${NC}"
     echo -e "  • Send any message to chat with AI"
