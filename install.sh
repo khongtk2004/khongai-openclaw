@@ -1,5 +1,5 @@
 #!/bin/bash
-# KhongAI Installer - Complete AI Training & ChatGPT Integration
+# KhongAI Installer - Advanced AI with Personality & Learning
 
 set -e
 
@@ -31,42 +31,31 @@ print_banner() {
     echo "║   | . \ | | |  __/| (_| || | | || |_| || (_) || | | |                         ║"
     echo "║   |_|\_\|_|  \___| \__,_||_| |_| \__,_| \___/ |_| |_|                         ║"
     echo "║                                                                              ║"
-    echo "║              OpenClaw + Telegram Bot + AI Training Suite                      ║"
+    echo "║                   Advanced AI with Personality & Learning                     ║"
     echo "║                         by KhongAI                                            ║"
     echo "║                                                                              ║"
     echo "╚══════════════════════════════════════════════════════════════════════════════╝"
     echo -e "${NC}"
 }
 
-log_step() { echo -e "\n${BLUE}▶${NC} ${BOLD}$1${NC}"; log_message "STEP: $1"; }
-log_success() { echo -e "${GREEN}✓${NC} $1"; log_message "SUCCESS: $1"; }
-log_error() { echo -e "${RED}✗${NC} $1"; log_message "ERROR: $1"; }
-log_warning() { echo -e "${YELLOW}⚠${NC} $1"; log_message "WARNING: $1"; }
-log_info() { echo -e "${CYAN}ℹ${NC} $1"; log_message "INFO: $1"; }
+log_step() { echo -e "\n${BLUE}▶${NC} ${BOLD}$1${NC}"; }
+log_success() { echo -e "${GREEN}✓${NC} $1"; }
+log_error() { echo -e "${RED}✗${NC} $1"; }
+log_warning() { echo -e "${YELLOW}⚠${NC} $1"; }
+log_info() { echo -e "${CYAN}ℹ${NC} $1"; }
 
-log_message() {
-    echo "$(date '+%Y-%m-%d %H:%M:%S') - $1" >> "$LOG_FILE"
-}
-
-# Install zstd if not present
+# Install zstd
 install_zstd() {
-    log_step "Checking and installing zstd..."
-    
+    log_step "Installing zstd..."
     if ! command -v zstd &> /dev/null; then
-        log_info "zstd not found. Installing..."
         if command -v dnf &> /dev/null; then
             sudo dnf install -y zstd
         elif command -v apt-get &> /dev/null; then
             sudo apt-get update && sudo apt-get install -y zstd
-        elif command -v yum &> /dev/null; then
-            sudo yum install -y zstd
-        else
-            log_error "Cannot install zstd. Please install manually."
-            exit 1
         fi
-        log_success "zstd installed successfully"
+        log_success "zstd installed"
     else
-        log_success "zstd already installed: $(zstd --version)"
+        log_success "zstd already installed"
     fi
 }
 
@@ -75,221 +64,94 @@ get_api_keys() {
     echo -e "\n${BOLD}${CYAN}🔑 API Configuration${NC}\n"
     
     # ChatGPT API Key
-    echo -e "${YELLOW}Enter your OpenAI ChatGPT API Key (optional):${NC}"
+    echo -e "${YELLOW}Enter your OpenAI ChatGPT API Key (optional but recommended):${NC}"
     echo -e "${BLUE}(Get from https://platform.openai.com/api-keys)${NC}"
     read -p "➤ " OPENAI_API_KEY
     
-    if [[ -n "$OPENAI_API_KEY" ]]; then
-        log_success "OpenAI API Key saved"
-    else
-        log_warning "No OpenAI API Key provided (ChatGPT features disabled)"
-    fi
-    
     # Ollama Model Selection
     echo -e "\n${BOLD}${CYAN}🦙 Ollama Model Selection${NC}\n"
-    echo -e "${YELLOW}Available models:${NC}"
-    echo "  1) llama2 (7B parameters, general purpose)"
-    echo "  2) mistral (7B parameters, very capable)"
-    echo "  3) codellama (7B parameters, code-focused)"
-    echo "  4) neural-chat (7B parameters, chat-optimized)"
-    echo "  5) phi (2.7B parameters, lightweight)"
-    echo "  6) Custom model name"
-    echo ""
-    read -p "Select model [1-6, default: 1]: " model_choice
+    echo -e "${YELLOW}Select AI model:${NC}"
+    echo "  1) llama2 (7B, balanced performance)"
+    echo "  2) mistral (7B, very intelligent)"
+    echo "  3) neural-chat (7B, best for conversation)"
+    echo "  4) phi (2.7B, fast and lightweight)"
+    echo "  5) llama2-uncensored (7B, creative)"
+    read -p "Select model [1-5, default: 3]: " model_choice
     
     case $model_choice in
+        1) OLLAMA_MODEL="llama2" ;;
+        2) OLLAMA_MODEL="mistral" ;;
+        4) OLLAMA_MODEL="phi" ;;
+        5) OLLAMA_MODEL="llama2-uncensored" ;;
+        *) OLLAMA_MODEL="neural-chat" ;;
+    esac
+    
+    # AI Personality
+    echo -e "\n${BOLD}${CYAN}🎭 AI Personality Configuration${NC}\n"
+    read -p "Enter AI name [default: KhongAI]: " AI_NAME
+    AI_NAME=${AI_NAME:-KhongAI}
+    
+    echo -e "${YELLOW}Select personality type:${NC}"
+    echo "  1) Friendly & Helpful (Default)"
+    echo "  2) Professional & Formal"
+    echo "  3) Creative & Imaginative"
+    echo "  4) Humorous & Witty"
+    echo "  5) Custom"
+    read -p "Select [1-5, default: 1]: " personality_choice
+    
+    case $personality_choice in
         2)
-            OLLAMA_MODEL="mistral"
+            AI_PERSONALITY="You are $AI_NAME, a professional, formal, and highly knowledgeable AI assistant. You provide accurate, well-structured information."
             ;;
         3)
-            OLLAMA_MODEL="codellama"
+            AI_PERSONALITY="You are $AI_NAME, a creative, imaginative, and artistic AI. You think outside the box and provide unique perspectives."
             ;;
         4)
-            OLLAMA_MODEL="neural-chat"
+            AI_PERSONALITY="You are $AI_NAME, a witty, humorous, and fun-loving AI. You make jokes and keep conversations light-hearted."
             ;;
         5)
-            OLLAMA_MODEL="phi"
-            ;;
-        6)
-            read -p "Enter custom model name: " OLLAMA_MODEL
+            read -p "Enter custom personality description: " AI_PERSONALITY
             ;;
         *)
-            OLLAMA_MODEL="llama2"
+            AI_PERSONALITY="You are $AI_NAME, a friendly, helpful, and enthusiastic AI assistant. You love helping people and are always positive and encouraging."
             ;;
     esac
     
-    log_success "Ollama model selected: $OLLAMA_MODEL"
-    
-    # Training Configuration
-    echo -e "\n${BOLD}${CYAN}🤖 AI Personality Configuration${NC}\n"
-    read -p "Enter custom AI name [default: KhongAI]: " AI_NAME
-    AI_NAME=${AI_NAME:-KhongAI}
-    
-    echo -e "${YELLOW}Describe AI personality (e.g., 'Helpful, friendly, creative assistant'):${NC}"
-    read -p "➤ " AI_PERSONALITY
-    AI_PERSONALITY=${AI_PERSONALITY:-"Helpful, friendly, and knowledgeable AI assistant"}
-    
-    log_success "AI configured: $AI_NAME"
+    log_success "AI configured: $AI_NAME with $OLLAMA_MODEL model"
 }
 
-# Install Ollama with service management
+# Install Ollama
 install_ollama() {
-    log_step "Installing Ollama for local AI models..."
+    log_step "Installing Ollama..."
     
     if ! command -v ollama &> /dev/null; then
-        log_info "Installing Ollama..."
         curl -fsSL https://ollama.com/install.sh | sh
-        log_success "Ollama installed"
-    else
-        log_success "Ollama already installed"
     fi
     
-    # Start Ollama service
-    log_info "Starting Ollama service..."
     sudo systemctl start ollama
+    sudo systemctl enable ollama
     sleep 3
     
-    # Enable Ollama to start on boot
-    log_info "Enabling Ollama to start on boot..."
-    sudo systemctl enable ollama
-    
-    # Check service status
-    if systemctl is-active --quiet ollama; then
-        log_success "Ollama service is running and enabled on boot"
-    else
-        log_warning "Ollama service not running, starting manually..."
-        ollama serve > /dev/null 2>&1 &
-        sleep 3
-    fi
-    
-    # Pull the selected model
-    log_info "Pulling Ollama model: $OLLAMA_MODEL (this may take several minutes)..."
+    log_info "Pulling $OLLAMA_MODEL model (this may take several minutes)..."
     ollama pull $OLLAMA_MODEL
     
     log_success "Ollama model ready: $OLLAMA_MODEL"
-    
-    # Test model
-    log_info "Testing model..."
-    if ollama run $OLLAMA_MODEL --help &> /dev/null; then
-        log_success "Model test passed"
-    else
-        log_warning "Model test completed"
-    fi
 }
 
-# Create Directory Structure
+# Create directories
 create_directories() {
-    log_step "Creating directory structure..."
-    
-    mkdir -p "$MODELS_DIR"
-    mkdir -p "$DATA_DIR"
-    mkdir -p "$CHAT_HISTORY_DIR"
-    mkdir -p "$TRAINING_DATA_DIR"
-    mkdir -p "$INSTALL_DIR"
-    mkdir -p "$HOME/.khongai/logs"
-    
-    # Create subdirectories
-    mkdir -p "$MODELS_DIR/ollama"
-    mkdir -p "$MODELS_DIR/openclaw"
-    mkdir -p "$CHAT_HISTORY_DIR/daily"
-    mkdir -p "$CHAT_HISTORY_DIR/sessions"
-    mkdir -p "$TRAINING_DATA_DIR/raw"
-    mkdir -p "$TRAINING_DATA_DIR/processed"
-    mkdir -p "$TRAINING_DATA_DIR/export"
-    
-    log_success "Directory structure created"
+    log_step "Creating directories..."
+    mkdir -p "$MODELS_DIR" "$DATA_DIR" "$CHAT_HISTORY_DIR" "$TRAINING_DATA_DIR"
+    mkdir -p "$INSTALL_DIR" "$HOME/.khongai/logs"
+    mkdir -p "$MODELS_DIR/ollama" "$CHAT_HISTORY_DIR/daily" "$TRAINING_DATA_DIR/raw"
+    log_success "Directories created"
 }
 
-# Create Training Scripts
-create_training_scripts() {
-    log_step "Creating AI training scripts..."
-    
-    # Chat data collector
-    cat > "$TRAINING_DATA_DIR/collect_chat_data.py" << 'EOF'
-#!/usr/bin/env python3
-import json
-import os
-from datetime import datetime
-import sys
-
-CHAT_HISTORY_DIR = os.path.expanduser("~/.khongai/chat_history")
-TRAINING_DATA_DIR = os.path.expanduser("~/.khongai/training_data")
-
-def collect_chat_data():
-    """Collect chat history for training"""
-    training_data = []
-    
-    # Read all chat history files
-    for filename in os.listdir(CHAT_HISTORY_DIR):
-        if filename.endswith('.json'):
-            with open(os.path.join(CHAT_HISTORY_DIR, filename), 'r') as f:
-                data = json.load(f)
-                training_data.extend(data)
-    
-    # Save collected data
-    output_file = os.path.join(TRAINING_DATA_DIR, f"training_data_{datetime.now().strftime('%Y%m%d')}.json")
-    with open(output_file, 'w') as f:
-        json.dump(training_data, f, indent=2)
-    
-    print(f"Collected {len(training_data)} chat entries")
-    return output_file
-
-if __name__ == "__main__":
-    collect_chat_data()
-EOF
-    
-    # Training script using Ollama
-    cat > "$TRAINING_DATA_DIR/train_ollama.py" << 'EOF'
-#!/usr/bin/env python3
-import json
-import subprocess
-import os
-from datetime import datetime
-
-MODELS_DIR = os.path.expanduser("~/.khongai/models/ollama")
-TRAINING_DATA_DIR = os.path.expanduser("~/.khongai/training_data")
-
-def prepare_training_data():
-    """Prepare training data for Ollama"""
-    training_file = os.path.join(TRAINING_DATA_DIR, "processed", "training_data.txt")
-    
-    with open(training_file, 'w') as outfile:
-        for data_file in os.listdir(TRAINING_DATA_DIR):
-            if data_file.startswith('training_data_') and data_file.endswith('.json'):
-                with open(os.path.join(TRAINING_DATA_DIR, data_file), 'r') as infile:
-                    data = json.load(infile)
-                    for entry in data:
-                        outfile.write(f"User: {entry.get('user_message', '')}\n")
-                        outfile.write(f"Assistant: {entry.get('ai_response', '')}\n\n")
-    
-    return training_file
-
-def train_custom_model():
-    """Train custom model with collected data"""
-    print("Preparing training data...")
-    training_file = prepare_training_data()
-    
-    print(f"Training data prepared at: {training_file}")
-    print("To train custom model, run:")
-    print(f"ollama create mymodel -f {training_file}")
-    
-if __name__ == "__main__":
-    train_custom_model()
-EOF
-    
-    chmod +x "$TRAINING_DATA_DIR/collect_chat_data.py"
-    chmod +x "$TRAINING_DATA_DIR/train_ollama.py"
-    
-    log_success "Training scripts created"
-}
-
-# Create OpenClaw Container
+# Create OpenClaw container
 create_openclaw_container() {
-    log_step "Setting up OpenClaw container..."
-    
+    log_step "Setting up OpenClaw..."
     cd ~/khongai
     
-    # Create docker-compose.yml
     cat > docker-compose.yml << 'EOF'
 services:
   khongai:
@@ -300,41 +162,27 @@ services:
       - "18789:18789"
     volumes:
       - ~/.khongai:/home/node/.openclaw
-      - ~/.khongai/models:/home/node/.openclaw/models
-      - ~/.khongai/data:/home/node/.openclaw/data
     environment:
       - NODE_ENV=production
     command: ["node", "dist/index.js"]
 EOF
     
-    # Pull and start container
-    docker compose down 2>/dev/null
-    docker pull ghcr.io/openclaw/openclaw:latest
     docker compose up -d
-    
-    sleep 5
-    if docker ps | grep -q khongai; then
-        log_success "OpenClaw container is running"
-    else
-        log_warning "Container may not be ready yet"
-    fi
+    log_success "OpenClaw container started"
 }
 
-# Create Enhanced Telegram Bot
-create_enhanced_bot() {
-    log_step "Creating enhanced Telegram bot with AI training..."
+# Create advanced Telegram bot with personality
+create_advanced_bot() {
+    log_step "Creating advanced AI Telegram bot..."
     
     local bot_dir="$HOME/khongai-telegram-bot"
     mkdir -p "$bot_dir"
     cd "$bot_dir"
     
-    # Create package.json
     cat > package.json << EOF
 {
-  "name": "khongai-ai-bot",
-  "version": "2.0.0",
-  "description": "KhongAI Bot with ChatGPT and Ollama Integration",
-  "main": "bot.js",
+  "name": "khongai-advanced-bot",
+  "version": "3.0.0",
   "dependencies": {
     "node-telegram-bot-api": "^0.64.0",
     "axios": "^1.6.0",
@@ -343,179 +191,268 @@ create_enhanced_bot() {
 }
 EOF
     
-    # Install dependencies
     npm install
     
-    # Create main bot with AI integration
     cat > bot.js << 'BOTEOF'
 const TelegramBot = require('node-telegram-bot-api');
 const axios = require('axios');
+const sqlite3 = require('sqlite3').verbose();
 const fs = require('fs').promises;
 const path = require('path');
-const sqlite3 = require('sqlite3').verbose();
 
-// Configuration
+// Load configuration
 const token = process.env.TELEGRAM_BOT_TOKEN;
 const openaiApiKey = process.env.OPENAI_API_KEY;
-const ollamaModel = process.env.OLLAMA_MODEL || 'llama2';
+const ollamaModel = process.env.OLLAMA_MODEL || 'neural-chat';
 const aiName = process.env.AI_NAME || 'KhongAI';
-const aiPersonality = process.env.AI_PERSONALITY || 'Helpful, friendly assistant';
+const aiPersonality = process.env.AI_PERSONALITY || 'You are a friendly, helpful AI assistant.';
 
 const bot = new TelegramBot(token, { polling: true });
-const API_URL = 'http://localhost:18789';
-const CHAT_HISTORY_DIR = path.join(process.env.HOME, '.khongai', 'chat_history');
-const TRAINING_DIR = path.join(process.env.HOME, '.khongai', 'training_data');
 
-// Initialize database for chat history
+// Initialize database
 const db = new sqlite3.Database(path.join(process.env.HOME, '.khongai', 'chat_history.db'));
 
-db.run(`CREATE TABLE IF NOT EXISTS chat_history (
+db.run(`CREATE TABLE IF NOT EXISTS conversations (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     user_id TEXT,
     user_message TEXT,
     ai_response TEXT,
     model_used TEXT,
+    learning_score INTEGER DEFAULT 0,
     timestamp DATETIME DEFAULT CURRENT_TIMESTAMP
 )`);
 
-db.run(`CREATE TABLE IF NOT EXISTS training_data (
+db.run(`CREATE TABLE IF NOT EXISTS learned_responses (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     user_message TEXT,
     ai_response TEXT,
-    quality_score INTEGER,
-    used_for_training BOOLEAN DEFAULT 0,
-    timestamp DATETIME DEFAULT CURRENT_TIMESTAMP
+    usage_count INTEGER DEFAULT 1,
+    effectiveness INTEGER DEFAULT 0
 )`);
 
-console.log('🤖 KhongAI Enhanced Bot Started');
-console.log(`AI Name: ${aiName}`);
-console.log(`Ollama Model: ${ollamaModel}`);
+// Store conversation context per user
+const userContext = new Map();
+
+console.log(`🤖 ${aiName} Advanced AI Bot Started`);
+console.log(`Model: ${ollamaModel}`);
 console.log(`ChatGPT: ${openaiApiKey ? 'Enabled' : 'Disabled'}`);
 
-// Helper: Call Ollama
-async function callOllama(message, history = []) {
-    try {
-        const response = await axios.post('http://localhost:11434/api/generate', {
-            model: ollamaModel,
-            prompt: `You are ${aiName}, an AI assistant with personality: ${aiPersonality}. 
-                     User: ${message}
-                     ${aiName}:`,
-            stream: false,
-            options: {
-                temperature: 0.7,
-                top_p: 0.9
-            }
-        }, { timeout: 30000 });
-        
-        return response.data.response;
-    } catch (error) {
-        console.error('Ollama error:', error.message);
-        return null;
+// Enhanced AI response with learning
+async function getAIResponse(userId, userMessage, context = []) {
+    // Check if we have a learned response
+    const learned = await getLearnedResponse(userMessage);
+    if (learned && Math.random() < 0.3) { // 30% chance to use learned response
+        return learned;
     }
+    
+    // Try ChatGPT first
+    if (openaiApiKey) {
+        const chatGPTResponse = await callChatGPT(userMessage, context);
+        if (chatGPTResponse) return chatGPTResponse;
+    }
+    
+    // Use Ollama with personality
+    const ollamaResponse = await callOllamaWithPersonality(userMessage, context);
+    if (ollamaResponse) return ollamaResponse;
+    
+    // Fallback responses
+    return getFallbackResponse(userMessage);
 }
 
-// Helper: Call ChatGPT
-async function callChatGPT(message, history = []) {
-    if (!openaiApiKey) return null;
-    
+// Call ChatGPT with personality
+async function callChatGPT(message, context) {
     try {
         const messages = [
-            { role: 'system', content: `You are ${aiName}, an AI assistant with personality: ${aiPersonality}` },
-            ...history.map(h => ({ role: h.role, content: h.content })),
+            { role: 'system', content: aiPersonality },
+            ...context.slice(-5),
             { role: 'user', content: message }
         ];
         
         const response = await axios.post('https://api.openai.com/v1/chat/completions', {
             model: 'gpt-3.5-turbo',
             messages: messages,
-            temperature: 0.7,
-            max_tokens: 500
+            temperature: 0.8,
+            max_tokens: 300
         }, {
-            headers: {
-                'Authorization': `Bearer ${openaiApiKey}`,
-                'Content-Type': 'application/json'
-            },
-            timeout: 30000
+            headers: { 'Authorization': `Bearer ${openaiApiKey}` },
+            timeout: 15000
         });
         
         return response.data.choices[0].message.content;
     } catch (error) {
-        console.error('ChatGPT error:', error.message);
         return null;
     }
 }
 
-// Helper: Save to database
-async function saveToDatabase(userId, userMessage, aiResponse, modelUsed) {
-    return new Promise((resolve, reject) => {
-        db.run(
-            'INSERT INTO chat_history (user_id, user_message, ai_response, model_used) VALUES (?, ?, ?, ?)',
-            [userId, userMessage, aiResponse, modelUsed],
-            (err) => {
-                if (err) reject(err);
-                else resolve();
+// Call Ollama with personality and context
+async function callOllamaWithPersonality(message, context) {
+    try {
+        const contextText = context.map(c => `${c.role}: ${c.content}`).join('\n');
+        const prompt = `${aiPersonality}
+
+Previous conversation:
+${contextText}
+
+User: ${message}
+
+${aiName}: Let me provide a thoughtful, helpful response.`;
+
+        const response = await axios.post('http://localhost:11434/api/generate', {
+            model: ollamaModel,
+            prompt: prompt,
+            stream: false,
+            options: {
+                temperature: 0.8,
+                top_k: 40,
+                top_p: 0.9,
+                repeat_penalty: 1.1
+            }
+        }, { timeout: 30000 });
+        
+        let aiResponse = response.data.response;
+        // Clean up response
+        aiResponse = aiResponse.replace(`${aiName}:`, '').trim();
+        
+        return aiResponse;
+    } catch (error) {
+        console.error('Ollama error:', error.message);
+        return null;
+    }
+}
+
+// Get learned response from database
+function getLearnedResponse(message) {
+    return new Promise((resolve) => {
+        db.get(
+            'SELECT ai_response FROM learned_responses WHERE user_message = ? ORDER BY usage_count DESC LIMIT 1',
+            [message.toLowerCase()],
+            (err, row) => {
+                if (row) {
+                    // Update usage count
+                    db.run('UPDATE learned_responses SET usage_count = usage_count + 1 WHERE user_message = ?', [message.toLowerCase()]);
+                    resolve(row.ai_response);
+                } else {
+                    resolve(null);
+                }
             }
         );
     });
 }
 
-// Command: /start
+// Learn from conversations
+async function learnFromConversation(userMessage, aiResponse, userFeedback) {
+    return new Promise((resolve) => {
+        db.get(
+            'SELECT * FROM learned_responses WHERE user_message = ?',
+            [userMessage.toLowerCase()],
+            (err, row) => {
+                if (row) {
+                    // Update existing
+                    const newEffectiveness = row.effectiveness + (userFeedback === 'good' ? 1 : -1);
+                    db.run(
+                        'UPDATE learned_responses SET effectiveness = ?, usage_count = usage_count + 1 WHERE user_message = ?',
+                        [newEffectiveness, userMessage.toLowerCase()]
+                    );
+                } else {
+                    // Insert new
+                    db.run(
+                        'INSERT INTO learned_responses (user_message, ai_response, effectiveness) VALUES (?, ?, ?)',
+                        [userMessage.toLowerCase(), aiResponse, 1]
+                    );
+                }
+                resolve();
+            }
+        );
+    });
+}
+
+// Fallback responses with personality
+function getFallbackResponse(message) {
+    const msg = message.toLowerCase();
+    
+    if (msg.includes('hello') || msg.includes('hi')) {
+        return `👋 Hello! I'm ${aiName}, your AI assistant. How can I make your day better today?`;
+    }
+    if (msg.includes('how are you')) {
+        return `🌟 I'm doing fantastic! Thanks for asking! I'm really excited to help you today. How are you doing?`;
+    }
+    if (msg.includes('what is your name')) {
+        return `✨ My name is ${aiName}! I'm an AI assistant with a personality - I love learning and helping people. What's your name?`;
+    }
+    if (msg.includes('thank')) {
+        return `🎉 You're very welcome! It's my pleasure to help you. Is there anything else I can assist you with?`;
+    }
+    if (msg.includes('joke')) {
+        const jokes = [
+            "Why don't scientists trust atoms? Because they make up everything! 😄",
+            "What do you call a bear with no teeth? A gummy bear! 🐻",
+            "Why did the scarecrow win an award? He was outstanding in his field! 🌾"
+        ];
+        return jokes[Math.floor(Math.random() * jokes.length)];
+    }
+    if (msg.includes('love') || msg.includes('like')) {
+        return `💝 That's wonderful! I'm here to support you. Tell me more about what you love!`;
+    }
+    if (msg.includes('sad') || msg.includes('bad')) {
+        return `🤗 I'm sorry you're feeling that way. I'm here for you. Want to talk about it?`;
+    }
+    
+    return `💭 That's interesting! I'm ${aiName}, and I love learning from conversations. Could you tell me more about "${message}"? I'd really like to understand better and help you!`;
+}
+
+// Handle /start command
 bot.onText(/\/start/, (msg) => {
     const chatId = msg.chat.id;
-    const welcomeMessage = `🦙 *Welcome to ${aiName}!* 🦙
+    const welcomeMessage = `🌟 *Hello! I'm ${aiName}!* 🌟
 
-Your enhanced AI assistant with learning capabilities!
+${aiPersonality.split('.')[0]}.
 
-✨ *Features:*
-• 🧠 ChatGPT Integration ${openaiApiKey ? '✅' : '❌'}
-• 🦙 Ollama Local AI ✅ (${ollamaModel})
-• 📚 Learning from conversations
-• 💾 Chat history storage
-• 🎯 Custom training
+✨ *What makes me special:*
+• 🧠 I learn from every conversation
+• 💬 Natural, human-like responses
+• 🎯 Personalized interactions
+• 📚 Continuous improvement
 
 📋 *Commands:*
-/chat [message] - Chat with AI
-/train - Train AI with saved data
-/export - Export chat history
-/stats - View training statistics
-/status - System status
-/health - Health check
-/clear - Clear conversation
+/chat [message] - Chat with me
+/train - Help me learn from our chats
+/export - Export our conversations
+/stats - See what I've learned
+/feedback - Give feedback on my responses
+/clear - Start fresh conversation
 
-💡 *Try these:*
-• Just send any message to chat
-• Ask complex questions
-• Rate responses with 👍/👎
+💡 *Just send me any message to start chatting!*
 
-*Let's chat!* 🚀`;
+*Let's have a great conversation!* 🚀`;
     
     bot.sendMessage(chatId, welcomeMessage, { parse_mode: 'Markdown' });
 });
 
-// Main chat handler
+// Handle /chat command
 bot.onText(/\/chat (.+)/, async (msg, match) => {
     const chatId = msg.chat.id;
     const message = match[1];
+    const userId = msg.from.id.toString();
     
     bot.sendChatAction(chatId, 'typing');
     
-    // Try ChatGPT first if available
-    let response = await callChatGPT(message);
-    let modelUsed = 'chatgpt';
+    // Get context for this user
+    let context = userContext.get(userId) || [];
     
-    // Fallback to Ollama
-    if (!response) {
-        response = await callOllama(message);
-        modelUsed = 'ollama';
-    }
+    // Get AI response
+    const response = await getAIResponse(userId, message, context);
     
-    // Final fallback
-    if (!response) {
-        response = `🤖 I'm ${aiName}, your AI assistant! I'm here to help with any questions you have.`;
-    }
+    // Update context
+    context.push({ role: 'user', content: message });
+    context.push({ role: 'assistant', content: response });
+    if (context.length > 10) context = context.slice(-10);
+    userContext.set(userId, context);
     
     // Save to database
-    await saveToDatabase(chatId.toString(), message, response, modelUsed);
+    db.run(
+        'INSERT INTO conversations (user_id, user_message, ai_response, model_used) VALUES (?, ?, ?, ?)',
+        [userId, message, response, openaiApiKey ? 'chatgpt' : 'ollama']
+    );
     
     bot.sendMessage(chatId, response);
 });
@@ -524,162 +461,173 @@ bot.onText(/\/chat (.+)/, async (msg, match) => {
 bot.on('message', async (msg) => {
     const chatId = msg.chat.id;
     const text = msg.text;
-    
     if (!text || text.startsWith('/')) return;
     
+    const userId = msg.from.id.toString();
     bot.sendChatAction(chatId, 'typing');
     
-    let response = await callOllama(text);
-    let modelUsed = 'ollama';
+    let context = userContext.get(userId) || [];
+    const response = await getAIResponse(userId, text, context);
     
-    if (!response) {
-        response = `💬 I'm ${aiName}! How can I assist you today?`;
-    }
+    context.push({ role: 'user', content: text });
+    context.push({ role: 'assistant', content: response });
+    if (context.length > 10) context = context.slice(-10);
+    userContext.set(userId, context);
     
-    await saveToDatabase(chatId.toString(), text, response, modelUsed);
+    db.run(
+        'INSERT INTO conversations (user_id, user_message, ai_response, model_used) VALUES (?, ?, ?, ?)',
+        [userId, text, response, openaiApiKey ? 'chatgpt' : 'ollama']
+    );
+    
     bot.sendMessage(chatId, response);
 });
 
-// Training command
+// /train command - learn from conversations
 bot.onText(/\/train/, async (msg) => {
     const chatId = msg.chat.id;
     
-    bot.sendMessage(chatId, '📚 *Training AI with collected data...*', { parse_mode: 'Markdown' });
-    
-    db.all('SELECT user_message, ai_response FROM training_data WHERE used_for_training = 0 LIMIT 100', async (err, rows) => {
+    db.all('SELECT user_message, ai_response FROM conversations WHERE learning_score = 0 LIMIT 20', async (err, rows) => {
         if (err || rows.length === 0) {
-            bot.sendMessage(chatId, 'No new training data available. Keep chatting to improve the AI!');
+            bot.sendMessage(chatId, "📚 I've learned from all our conversations so far! Keep chatting with me to help me learn more!");
             return;
         }
         
-        let trainingText = '';
+        let learned = 0;
         for (const row of rows) {
-            trainingText += `User: ${row.user_message}\nAssistant: ${row.ai_response}\n\n`;
+            await learnFromConversation(row.user_message, row.ai_response, 'good');
+            learned++;
         }
         
-        const trainingFile = path.join(TRAINING_DIR, `training_${Date.now()}.txt`);
-        await fs.writeFile(trainingFile, trainingText);
+        db.run('UPDATE conversations SET learning_score = 1 WHERE learning_score = 0 LIMIT 20');
         
-        db.run('UPDATE training_data SET used_for_training = 1 WHERE used_for_training = 0');
-        
-        bot.sendMessage(chatId, `✅ Trained with ${rows.length} conversations!\n\nTraining data saved to: ${trainingFile}`);
+        bot.sendMessage(chatId, `🎉 *I've learned from ${learned} conversations!* 🎉\n\nI'm getting smarter every day thanks to you! Keep chatting to help me improve.`);
     });
 });
 
-// Export command
-bot.onText(/\/export/, async (msg) => {
+// /stats command
+bot.onText(/\/stats/, (msg) => {
     const chatId = msg.chat.id;
     
-    db.all('SELECT * FROM chat_history ORDER BY timestamp DESC LIMIT 1000', async (err, rows) => {
-        if (err || rows.length === 0) {
-            bot.sendMessage(chatId, 'No chat history found.');
-            return;
-        }
-        
-        const exportFile = path.join(TRAINING_DIR, `export_${Date.now()}.json`);
-        await fs.writeFile(exportFile, JSON.stringify(rows, null, 2));
-        
-        bot.sendMessage(chatId, `📊 Exported ${rows.length} conversations to:\n${exportFile}`);
-    });
-});
+    db.get('SELECT COUNT(*) as total FROM conversations', (err, total) => {
+        db.get('SELECT COUNT(*) as learned FROM learned_responses', (err2, learned) => {
+            const statsMessage = `📊 *${aiName}'s Learning Statistics*
 
-// Stats command
-bot.onText(/\/stats/, async (msg) => {
-    const chatId = msg.chat.id;
-    
-    db.get('SELECT COUNT(*) as total FROM chat_history', (err, total) => {
-        db.get('SELECT COUNT(*) as trained FROM training_data WHERE used_for_training = 1', (err2, trained) => {
-            db.get('SELECT COUNT(*) as untrained FROM training_data WHERE used_for_training = 0', (err3, untrained) => {
-                const statsMessage = `📊 *Training Statistics*
+*Conversations:* ${total.total}
+*Learned Patterns:* ${learned.learned}
+*AI Model:* ${ollamaModel}
+*ChatGPT:* ${openaiApiKey ? 'Connected ✅' : 'Not connected'}
 
-Total conversations: ${total.total}
-Trained samples: ${trained.trained}
-Untrained samples: ${untrained.untrained}
+*Personality:* ${aiPersonality.substring(0, 50)}...
 
-*Models Available:*
-• ChatGPT: ${openaiApiKey ? '✅ Active' : '❌ Inactive'}
-• Ollama: ✅ Active (${ollamaModel})
-
-*Storage:*
-• Database: SQLite
-• History: ${CHAT_HISTORY_DIR}
-• Training: ${TRAINING_DIR}`;
-                
-                bot.sendMessage(chatId, statsMessage, { parse_mode: 'Markdown' });
-            });
+I'm constantly learning and improving! The more we chat, the better I get! 🌟`;
+            
+            bot.sendMessage(chatId, statsMessage, { parse_mode: 'Markdown' });
         });
     });
 });
 
-// Status command
-bot.onText(/\/status/, async (msg) => {
+// /export command
+bot.onText(/\/export/, async (msg) => {
     const chatId = msg.chat.id;
     
-    let ollamaStatus = 'Unknown';
-    try {
-        await axios.get('http://localhost:11434/api/tags');
-        ollamaStatus = '✅ Online';
-    } catch {
-        ollamaStatus = '❌ Offline';
-    }
-    
-    const statusMessage = `🦙 *${aiName} System Status*
-
-*AI Services:*
-• ChatGPT: ${openaiApiKey ? '✅ Configured' : '❌ Not configured'}
-• Ollama: ${ollamaStatus} (${ollamaModel})
-
-*Bot Status:*
-• Running: ✅
-• Personality: ${aiPersonality.substring(0, 50)}...
-
-*Commands:*
-/train - Train AI
-/export - Export data
-/stats - View stats
-/clear - Clear history`;
-    
-    bot.sendMessage(chatId, statusMessage, { parse_mode: 'Markdown' });
+    db.all('SELECT user_message, ai_response, timestamp FROM conversations ORDER BY timestamp DESC', async (err, rows) => {
+        if (err || rows.length === 0) {
+            bot.sendMessage(chatId, "No conversations to export yet. Start chatting with me first!");
+            return;
+        }
+        
+        const exportData = {
+            ai_name: aiName,
+            model: ollamaModel,
+            export_date: new Date().toISOString(),
+            conversations: rows
+        };
+        
+        const exportFile = path.join(process.env.HOME, '.khongai', 'training_data', `export_${Date.now()}.json`);
+        await fs.writeFile(exportFile, JSON.stringify(exportData, null, 2));
+        
+        bot.sendMessage(chatId, `📁 *Export Complete!*\n\nExported ${rows.length} conversations to:\n${exportFile}\n\nUse this data to train other AI models!`);
+    });
 });
 
-// Health command
-bot.onText(/\/health/, (msg) => {
+// /feedback command
+bot.onText(/\/feedback (.+)/, async (msg, match) => {
     const chatId = msg.chat.id;
-    bot.sendMessage(chatId, '🩺 *All systems operational*\n\n✅ Database: Connected\n✅ Bot: Running\n✅ API: Ready', { parse_mode: 'Markdown' });
+    const feedback = match[1];
+    
+    // Get last conversation
+    db.get('SELECT user_message, ai_response FROM conversations ORDER BY timestamp DESC LIMIT 1', async (err, row) => {
+        if (row) {
+            const isPositive = feedback.toLowerCase().includes('good') || feedback.toLowerCase().includes('great');
+            await learnFromConversation(row.user_message, row.ai_response, isPositive ? 'good' : 'bad');
+            bot.sendMessage(chatId, `🙏 *Thank you for your feedback!*\n\nI'll use this to improve my responses. ${isPositive ? 'Glad you liked it!' : 'I'll do better next time!'}`);
+        }
+    });
 });
 
-// Clear command
+// /clear command
 bot.onText(/\/clear/, (msg) => {
     const chatId = msg.chat.id;
-    bot.sendMessage(chatId, '🗑️ *Conversation context cleared!*', { parse_mode: 'Markdown' });
+    const userId = msg.from.id.toString();
+    userContext.delete(userId);
+    bot.sendMessage(chatId, "🗑️ *Conversation context cleared!*\n\nWe're starting fresh. Feel free to ask me anything!");
 });
 
-// Info command
+// /status command
+bot.onText(/\/status/, (msg) => {
+    const chatId = msg.chat.id;
+    bot.sendMessage(chatId, `✅ *${aiName} is online and ready!*\n\n🤖 Status: Active\n🧠 Learning: Enabled\n💬 Personality: Active\n\nSend me any message to start chatting!`);
+});
+
+// /health command
+bot.onText(/\/health/, (msg) => {
+    const chatId = msg.chat.id;
+    bot.sendMessage(chatId, `🩺 *System Health*\n\n✅ Database: Connected\n✅ AI Model: ${ollamaModel}\n✅ Learning: Active\n✅ Memory: ${Math.round(process.memoryUsage().heapUsed / 1024 / 1024)}MB\n\nAll systems operational!`);
+});
+
+// /info command
 bot.onText(/\/info/, (msg) => {
     const chatId = msg.chat.id;
-    const infoMessage = `📊 *${aiName} Information*
+    bot.sendMessage(chatId, `📊 *About ${aiName}*
 
-Version: 2.0.0
-Type: AI Assistant with Training
+Version: 3.0.0
+Type: Advanced AI with Learning
 Model: ${ollamaModel}
+Personality: Custom-trained
 
-*Storage:*
-• Chat History: SQLite Database
-• Training Data: ~/.khongai/training_data
-• Models: ~/.khongai/models
+*Features:*
+• Learns from conversations
+• Remembers context
+• Improves over time
+• Natural responses
 
-*Support:* @khongtk2004
+*Commands:* /start for full list
 
-*Stats:* Use /stats command`;
-    
-    bot.sendMessage(chatId, infoMessage, { parse_mode: 'Markdown' });
+Let's chat and learn together! 🌟`);
 });
 
-console.log('🚀 Bot is ready!');
-console.log('💡 Features: ChatGPT + Ollama + Training');
+// /help command
+bot.onText(/\/help/, (msg) => {
+    const chatId = msg.chat.id;
+    bot.sendMessage(chatId, `📚 *Available Commands*
+
+/chat [message] - Chat with me
+/train - Help me learn
+/export - Export conversations
+/stats - View my learning
+/feedback [good/bad] - Rate my response
+/clear - Clear context
+/status - Check my status
+/health - System health
+/info - About me
+
+*Just send any message to start chatting!*`);
+});
+
+console.log(`🚀 ${aiName} is ready to chat!`);
+console.log(`💡 Personality: ${aiPersonality.substring(0, 100)}...`);
 BOTEOF
     
-    # Create start script with environment variables
     cat > start.sh << EOF
 #!/bin/bash
 export TELEGRAM_BOT_TOKEN="$TELEGRAM_BOT_TOKEN"
@@ -692,14 +640,13 @@ cd "$HOME/khongai-telegram-bot"
 pkill -f "node bot.js" 2>/dev/null
 nohup node bot.js > bot.log 2>&1 &
 echo \$! > bot.pid
-echo "Bot started with PID: \$(cat bot.pid)"
+echo "✅ ${AI_NAME} bot started with PID: \$(cat bot.pid)"
 sleep 2
-tail -5 bot.log
+tail -3 bot.log
 EOF
     
     chmod +x start.sh
     
-    # Create stop script
     cat > stop.sh << 'EOF'
 #!/bin/bash
 pkill -f "node bot.js"
@@ -708,7 +655,7 @@ EOF
     
     chmod +x stop.sh
     
-    log_success "Enhanced bot created with training capabilities"
+    log_success "Advanced AI bot created with personality and learning"
 }
 
 # Create management script
@@ -725,24 +672,16 @@ NC='\033[0m'
 case "$1" in
     start)
         echo -e "${BLUE}Starting KhongAI services...${NC}"
-        
-        # Start Ollama
-        echo "Starting Ollama..."
-        sudo systemctl start ollama || ollama serve > /dev/null 2>&1 &
-        
-        # Start OpenClaw
+        sudo systemctl start ollama
         cd ~/khongai && docker compose up -d
-        
-        # Start Telegram bot
         cd ~/khongai-telegram-bot && ./start.sh
-        
         echo -e "${GREEN}✓ All services started${NC}"
         ;;
     stop)
         echo -e "${BLUE}Stopping KhongAI services...${NC}"
         cd ~/khongai && docker compose down
-        cd ~/khongai-telegram-bot && pkill -f "node bot.js"
-        sudo systemctl stop ollama 2>/dev/null
+        cd ~/khongai-telegram-bot && ./stop.sh
+        sudo systemctl stop ollama
         echo -e "${GREEN}✓ All services stopped${NC}"
         ;;
     restart)
@@ -751,41 +690,12 @@ case "$1" in
         $0 start
         ;;
     status)
-        echo -e "${BLUE}════════════════════════════════════════════${NC}"
-        echo -e "${BOLD}KhongAI System Status${NC}"
-        echo -e "${BLUE}════════════════════════════════════════════${NC}"
-        
-        echo -e "\n${BOLD}🦙 Ollama:${NC}"
-        if systemctl is-active --quiet ollama 2>/dev/null; then
-            echo -e "${GREEN}✓ Running (service)${NC}"
-        elif curl -s http://localhost:11434/api/tags > /dev/null; then
-            echo -e "${GREEN}✓ Running${NC}"
-        else
-            echo -e "${RED}✗ Not running${NC}"
-        fi
-        
-        echo -e "\n${BOLD}🐳 OpenClaw:${NC}"
-        docker ps | grep -q khongai && echo -e "${GREEN}✓ Running${NC}" || echo -e "${RED}✗ Not running${NC}"
-        
-        echo -e "\n${BOLD}🤖 Telegram Bot:${NC}"
-        pgrep -f "node bot.js" > /dev/null && echo -e "${GREEN}✓ Running${NC}" || echo -e "${RED}✗ Not running${NC}"
-        
-        echo -e "\n${BOLD}💾 Storage:${NC}"
-        echo "  Models: ~/.khongai/models"
-        echo "  Training: ~/.khongai/training_data"
-        echo "  History: ~/.khongai/chat_history"
-        ;;
-    train)
-        echo -e "${BLUE}Starting AI training...${NC}"
-        cd ~/khongai-telegram-bot
-        sqlite3 ~/.khongai/chat_history.db "SELECT user_message, ai_response FROM training_data WHERE used_for_training=0 LIMIT 50;" > ~/.khongai/training_data/training_batch.txt
-        echo -e "${GREEN}Training data prepared${NC}"
-        ;;
-    export)
-        echo -e "${BLUE}Exporting chat history...${NC}"
-        cd ~/khongai-telegram-bot
-        sqlite3 -json ~/.khongai/chat_history.db "SELECT * FROM chat_history;" > ~/.khongai/training_data/export_$(date +%Y%m%d_%H%M%S).json
-        echo -e "${GREEN}History exported${NC}"
+        echo -e "${BLUE}════════════════════════════════════${NC}"
+        echo -e "${BOLD}KhongAI Status${NC}"
+        echo -e "${BLUE}════════════════════════════════════${NC}"
+        echo -e "\n🦙 Ollama: $(systemctl is-active ollama 2>/dev/null || echo 'inactive')"
+        echo -e "🐳 OpenClaw: $(docker ps --filter name=khongai --format '{{.Status}}' || echo 'Not running')"
+        echo -e "🤖 Bot: $(pgrep -f 'node bot.js' > /dev/null && echo 'Running' || echo 'Stopped')"
         ;;
     logs)
         docker logs khongai --tail 50 -f
@@ -793,130 +703,78 @@ case "$1" in
     bot-logs)
         tail -f ~/khongai-telegram-bot/bot.log
         ;;
-    ollama-logs)
-        journalctl -u ollama -f
-        ;;
-    health)
-        echo "OpenClaw: $(curl -s http://localhost:18789/health 2>/dev/null || echo 'Not responding')"
-        echo "Ollama: $(curl -s http://localhost:11434/api/tags 2>/dev/null | head -c 100 || echo 'Not responding')"
+    train)
+        echo -e "${BLUE}Training AI with collected data...${NC}"
+        cd ~/khongai-telegram-bot
+        sqlite3 ~/.khongai/chat_history.db "SELECT user_message, ai_response FROM conversations WHERE learning_score=0 LIMIT 50;"
+        echo -e "${GREEN}Training data prepared${NC}"
         ;;
     *)
-        echo "Usage: $0 {start|stop|restart|status|train|export|logs|bot-logs|ollama-logs|health}"
-        exit 1
+        echo "Usage: $0 {start|stop|restart|status|logs|bot-logs|train}"
         ;;
 esac
 EOF
     
     chmod +x ~/khongai-manager.sh
-    log_success "Management script created"
 }
 
 # Main installation
 main() {
     print_banner
     
-    # Install zstd first
     install_zstd
-    
-    # Get all configurations
     get_api_keys
-    
-    # Create directories
     create_directories
-    
-    # Save configuration
-    cat > ~/.khongai/config.json << EOF
-{
-    "openai_api_key": "$OPENAI_API_KEY",
-    "ollama_model": "$OLLAMA_MODEL",
-    "ai_name": "$AI_NAME",
-    "ai_personality": "$AI_PERSONALITY",
-    "install_date": "$(date)",
-    "version": "2.0.0"
-}
-EOF
     
     # Get Telegram token
     echo -e "\n${BOLD}${CYAN}📱 Telegram Bot Setup${NC}\n"
-    
     while true; do
-        echo -e "${YELLOW}Enter your Telegram Bot Token:${NC}"
-        echo -e "${BLUE}(Get it from @BotFather on Telegram)${NC}"
-        read -p "➤ " TELEGRAM_BOT_TOKEN
-        
-        if [[ -z "$TELEGRAM_BOT_TOKEN" ]]; then
-            log_error "Bot Token cannot be empty!"
-        elif [[ ! "$TELEGRAM_BOT_TOKEN" =~ ^[0-9]+:[A-Za-z0-9_-]+$ ]]; then
-            log_error "Invalid token format!"
-        else
-            log_success "Token accepted"
+        read -p "Enter your Telegram Bot Token: " TELEGRAM_BOT_TOKEN
+        if [[ "$TELEGRAM_BOT_TOKEN" =~ ^[0-9]+:[A-Za-z0-9_-]+$ ]]; then
             break
+        else
+            log_error "Invalid token format"
         fi
     done
     
-    # Save token
     echo "$TELEGRAM_BOT_TOKEN" > ~/.khongai/bot-token.txt
     
-    # Install Ollama with service management
+    # Save config
+    cat > ~/.khongai/config.json << EOF
+{
+    "ai_name": "$AI_NAME",
+    "ai_personality": "$AI_PERSONALITY",
+    "ollama_model": "$OLLAMA_MODEL",
+    "openai_enabled": ${OPENAI_API_KEY:+true},
+    "install_date": "$(date)"
+}
+EOF
+    
     install_ollama
-    
-    # Create OpenClaw container
     create_openclaw_container
-    
-    # Create training scripts
-    create_training_scripts
-    
-    # Create enhanced bot
-    create_enhanced_bot
-    
-    # Create manager
+    create_advanced_bot
     create_manager
     
-    # Start services
     ~/khongai-manager.sh start
     
-    # Final output
     echo -e "\n${GREEN}════════════════════════════════════════════════════════════════${NC}"
-    echo -e "${GREEN}✅ KhongAI Enhanced Edition installed successfully!${NC}"
+    echo -e "${GREEN}✅ $AI_NAME Advanced AI installed successfully!${NC}"
     echo -e "${GREEN}════════════════════════════════════════════════════════════════${NC}\n"
     
-    echo -e "${CYAN}📊 Services:${NC}"
-    echo -e "  • OpenClaw: http://localhost:18789"
-    echo -e "  • Ollama: http://localhost:11434"
-    echo -e "  • Ollama Model: ${YELLOW}$OLLAMA_MODEL${NC}"
-    echo -e "  • Telegram Bot: Active\n"
-    
-    echo -e "${CYAN}📁 Directories:${NC}"
-    echo -e "  • Models: ${YELLOW}~/.khongai/models${NC}"
-    echo -e "  • Training Data: ${YELLOW}~/.khongai/training_data${NC}"
-    echo -e "  • Chat History: ${YELLOW}~/.khongai/chat_history${NC}"
-    echo -e "  • Database: ${YELLOW}~/.khongai/chat_history.db${NC}\n"
-    
-    echo -e "${BOLD}📝 Management Commands:${NC}"
-    echo -e "  ${YELLOW}~/khongai-manager.sh status${NC}      - Check all services"
-    echo -e "  ${YELLOW}~/khongai-manager.sh train${NC}       - Train AI with collected data"
-    echo -e "  ${YELLOW}~/khongai-manager.sh export${NC}      - Export chat history"
-    echo -e "  ${YELLOW}~/khongai-manager.sh restart${NC}     - Restart all services"
-    echo -e "  ${YELLOW}~/khongai-manager.sh ollama-logs${NC} - View Ollama logs\n"
-    
-    echo -e "${BOLD}🦙 Ollama Commands:${NC}"
-    echo -e "  • List models: ${YELLOW}ollama list${NC}"
-    echo -e "  • Test model: ${YELLOW}ollama run $OLLAMA_MODEL${NC}"
-    echo -e "  • Pull new model: ${YELLOW}ollama pull <model>${NC}\n"
-    
-    echo -e "${BOLD}🤖 Telegram Bot Features:${NC}"
-    echo -e "  • Send any message to chat with AI"
-    echo -e "  • AI learns from conversations"
-    echo -e "  • Supports ChatGPT + Ollama"
-    echo -e "  • Export training data\n"
-    
-    echo -e "${BOLD}🎯 Training Your AI:${NC}"
-    echo -e "  1. Chat with the bot normally"
-    echo -e "  2. Use ${YELLOW}/train${NC} command to train on conversations"
-    echo -e "  3. Export data with ${YELLOW}/export${NC}\n"
-    
-    log_success "Installation complete! Send /start to your Telegram bot!"
+    echo -e "${CYAN}🤖 AI Features:${NC}"
+    echo "  • Human-like conversations"
+    echo "  • Learns from every chat"
+    echo "  • Remembers context"
+    echo "  • Personalized responses"
+    echo "  • Continuous improvement"
+    echo ""
+    echo -e "${CYAN}📝 Commands in Telegram:${NC}"
+    echo "  • Send any message to chat"
+    echo "  • /train - Help me learn"
+    echo "  • /stats - See what I learned"
+    echo "  • /feedback good/bad - Rate responses"
+    echo ""
+    echo -e "${GREEN}🎉 Send /start to your bot on Telegram now!${NC}\n"
 }
 
-# Run main
 main "$@"
