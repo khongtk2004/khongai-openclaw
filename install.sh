@@ -51,8 +51,13 @@ install_deps() {
     # Install Node.js if not present
     if ! command -v node &> /dev/null; then
         log_info "Installing Node.js..."
-        curl -fsSL https://rpm.nodesource.com/setup_20.x | sudo bash -
-        sudo dnf install -y nodejs
+        if command -v dnf &> /dev/null; then
+            curl -fsSL https://rpm.nodesource.com/setup_20.x | sudo bash -
+            sudo dnf install -y nodejs
+        elif command -v apt-get &> /dev/null; then
+            curl -fsSL https://deb.nodesource.com/setup_20.x | sudo -E bash -
+            sudo apt-get install -y nodejs
+        fi
     fi
     
     log_success "Dependencies installed"
@@ -607,8 +612,8 @@ bot.onText(/\/knowledge(?:\s+(.+))?/, async (msg, match) => {
 
 **Examples:**
 • /knowledge Kali Linux
-• /什么是nmap
-• /how to use apt-get
+• /knowledge nmap
+• /knowledge how to use apt-get
 
 **Current Knowledge:** ${count} items learned
 
@@ -822,7 +827,7 @@ EOF
     log_success "Management script created"
 }
 
-// Main installation
+# Main installation
 main() {
     print_banner
 
