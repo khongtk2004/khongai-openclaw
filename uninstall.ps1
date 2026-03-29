@@ -1,181 +1,150 @@
-# KhongAI Uninstaller - Windows PowerShell Version
+# KhongAI Uninstaller for Windows PowerShell
+# Run as Administrator
 
-param(
-    [string]$InstallDir = "$env:USERPROFILE\khongai",
-    [switch]$KeepData,
-    [switch]$KeepImage,
-    [switch]$Force,
-    [switch]$Help
-)
+$RED = "`e[31m"
+$GREEN = "`e[32m"
+$YELLOW = "`e[33m"
+$BLUE = "`e[34m"
+$CYAN = "`e[36m"
+$BOLD = "`e[1m"
+$NC = "`e[0m"
 
-$Image = "ghcr.io/khongtk2004/khongai-openclaw:latest"
-$ErrorActionPreference = "Stop"
-
-function Write-Banner {
-    Write-Host ""
-    Write-Host "╔══════════════════════════════════════════════════════════════╗" -ForegroundColor Cyan
-    Write-Host "║                                                              ║" -ForegroundColor Cyan
-    Write-Host "║    _  __ _                                                    ║" -ForegroundColor Cyan
-    Write-Host "║   | |/ /| |                                                   ║" -ForegroundColor Cyan
-    Write-Host "║   | ' / | |   ___   __ _  _ __   _   _   ___   _ __           ║" -ForegroundColor Cyan
-    Write-Host "║   |  <  | |  / _ \ / _\` || '_ \ | | | | / _ \ | '_ \          ║" -ForegroundColor Cyan
-    Write-Host "║   | . \ | | |  __/| (_| || | | || |_| || (_) || | | |         ║" -ForegroundColor Cyan
-    Write-Host "║   |_|\_\|_|  \___| \__,_||_| |_| \__,_| \___/ |_| |_|         ║" -ForegroundColor Cyan
-    Write-Host "║                                                              ║" -ForegroundColor Cyan
-    Write-Host "║            Docker Uninstaller by KhongAI                      ║" -ForegroundColor Cyan
-    Write-Host "║                                                              ║" -ForegroundColor Cyan
-    Write-Host "╚══════════════════════════════════════════════════════════════╝" -ForegroundColor Cyan
-    Write-Host ""
+function Print-Banner {
+    Write-Host "${RED}"
+    Write-Host "╔══════════════════════════════════════════════════════════════╗"
+    Write-Host "║                                                              ║"
+    Write-Host "║         ██╗  ██╗ ██████╗ ███╗   ██╗ ██████╗                  ║"
+    Write-Host "║         ██║  ██║██╔═══██╗████╗  ██║██╔════╝                  ║"
+    Write-Host "║         ███████║██║   ██║██╔██╗ ██║██║  ███╗                 ║"
+    Write-Host "║         ██╔══██║██║   ██║██║╚██╗██║██║   ██║                 ║"
+    Write-Host "║         ██║  ██║╚██████╔╝██║ ╚████║╚██████╔╝                 ║"
+    Write-Host "║         ╚═╝  ╚═╝ ╚═════╝ ╚═╝  ╚═══╝ ╚═════╝                  ║"
+    Write-Host "║                                                              ║"
+    Write-Host "║                 KhongAI Uninstaller                           ║"
+    Write-Host "║                                                              ║"
+    Write-Host "╚══════════════════════════════════════════════════════════════╝"
+    Write-Host "${NC}"
 }
 
-function Write-Step {
-    param([string]$Message)
-    Write-Host ""
-    Write-Host "▶ $Message" -ForegroundColor Blue
+function Log-Step { Write-Host "`n${BLUE}▶${NC} ${BOLD}$args${NC}" }
+function Log-Success { Write-Host "${GREEN}✓${NC} $args" }
+function Log-Error { Write-Host "${RED}✗${NC} $args" }
+function Log-Warning { Write-Host "${YELLOW}⚠${NC} $args" }
+function Log-Info { Write-Host "${CYAN}ℹ${NC} $args" }
+
+# Check if running as administrator
+if (-NOT ([Security.Principal.WindowsPrincipal] [Security.Principal.WindowsIdentity]::GetCurrent()).IsInRole([Security.Principal.WindowsBuiltInRole] "Administrator")) {
+    Write-Host "${RED}This script must be run as Administrator!${NC}"
+    Write-Host "Please right-click PowerShell and select 'Run as Administrator'"
+    pause
+    exit 1
 }
 
-function Write-Success {
-    param([string]$Message)
-    Write-Host "✓ $Message" -ForegroundColor Green
-}
+Print-Banner
 
-function Write-Warning {
-    param([string]$Message)
-    Write-Host "⚠ $Message" -ForegroundColor Yellow
-}
-
-function Confirm-Action {
-    param(
-        [string]$Prompt,
-        [string]$Default = "n"
-    )
-    
-    if ($Force) {
-        return $true
-    }
-    
-    if ($Default -eq "y") {
-        $PromptText = "$Prompt [Y/n] "
-    } else {
-        $PromptText = "$Prompt [y/N] "
-    }
-    
-    while ($true) {
-        Write-Host $PromptText -ForegroundColor Yellow -NoNewline
-        $response = Read-Host
-        if ([string]::IsNullOrEmpty($response)) {
-            $response = $Default
-        }
-        
-        switch -Regex ($response) {
-            '^[Yy]' { return $true }
-            '^[Nn]' { return $false }
-            default { Write-Host "Please answer yes or no." }
-        }
-    }
-}
-
-if ($Help) {
-    Write-Host "KhongAI Uninstaller - Windows"
-    Write-Host ""
-    Write-Host "Usage: uninstall.ps1 [OPTIONS]"
-    Write-Host ""
-    Write-Host "Options:"
-    Write-Host "  -InstallDir DIR   Installation directory (default: ~\khongai)"
-    Write-Host "  -KeepData         Keep configuration and workspace data"
-    Write-Host "  -KeepImage        Keep Docker image"
-    Write-Host "  -Force            Skip confirmation prompts"
-    Write-Host "  -Help             Show this help message"
-    return
-}
-
-Write-Banner
-
-Write-Host "This will uninstall KhongAI from your system." -ForegroundColor Yellow
+# Confirmation
+Write-Host "`n${RED}${BOLD}WARNING: This will completely remove KhongAI and all data!${NC}"
+Write-Host "${YELLOW}This includes:${NC}"
+Write-Host "  - Docker containers and images"
+Write-Host "  - Configuration files"
+Write-Host "  - Telegram bot files"
+Write-Host "  - Workspace data"
+Write-Host "  - Logs"
 Write-Host ""
-
-Write-Step "Stopping and removing containers..."
-
-$ContainersRemoved = $false
-try {
-    $containers = docker ps -a --format "{{.Names}}" 2>$null
-    
-    if ($containers -match "khongai") {
-        docker stop khongai 2>$null | Out-Null
-        docker rm khongai 2>$null | Out-Null
-        Write-Success "Removed khongai container"
-        $ContainersRemoved = $true
-    }
-} catch {
-    # Ignore errors
+$confirm = Read-Host "Are you sure you want to continue? (yes/no)"
+if ($confirm -ne "yes") {
+    Write-Host "Uninstall cancelled."
+    exit 0
 }
 
-if (-not $ContainersRemoved) {
-    Write-Warning "No KhongAI containers found"
-}
-
-$ConfigDir = "$env:USERPROFILE\.khongai"
-
-if (-not $KeepData -and (Test-Path $ConfigDir)) {
-    Write-Step "Data directories found at $ConfigDir"
-    
-    if (Confirm-Action "Remove configuration and workspace data? (This cannot be undone)") {
-        Remove-Item -Path $ConfigDir -Recurse -Force -ErrorAction SilentlyContinue
-        Write-Success "Removed data directory: $ConfigDir"
-    } else {
-        Write-Warning "Keeping data directory: $ConfigDir"
-    }
-} elseif ($KeepData -and (Test-Path $ConfigDir)) {
-    Write-Warning "Keeping data directory: $ConfigDir"
-}
-
-if (-not $KeepImage) {
-    try {
-        $images = docker images --format "{{.Repository}}:{{.Tag}}" 2>$null
-        
-        if ($images -match [regex]::Escape($Image)) {
-            Write-Step "Docker image found: $Image"
-            
-            if (Confirm-Action "Remove Docker image? (You can re-download it later)") {
-                try {
-                    docker rmi $Image 2>$null | Out-Null
-                    Write-Success "Removed Docker image"
-                } catch {
-                    Write-Warning "Could not remove image (may be in use)"
-                }
-            } else {
-                Write-Warning "Keeping Docker image: $Image"
-            }
-        }
-    } catch {
-        Write-Warning "Could not check for Docker image"
-    }
+# Stop and remove Docker container
+Log-Step "Stopping and removing Docker container..."
+$containerExists = docker ps -a --filter "name=khongai" --format "table {{.Names}}" | Select-String "khongai"
+if ($containerExists) {
+    docker stop khongai 2>$null
+    docker rm khongai 2>$null
+    Log-Success "Docker container removed"
 } else {
-    Write-Warning "Keeping Docker image: $Image"
+    Log-Info "No Docker container found"
 }
 
-if (Test-Path $InstallDir) {
-    Write-Step "Installation directory found at $InstallDir"
-    
-    if (Confirm-Action "Remove installation directory?") {
-        Remove-Item -Path $InstallDir -Recurse -Force -ErrorAction SilentlyContinue
-        Write-Success "Removed installation directory: $InstallDir"
-    } else {
-        Write-Warning "Keeping installation directory: $InstallDir"
-    }
+# Remove Docker image
+$removeImage = Read-Host "Remove OpenClaw Docker image as well? (yes/no)"
+if ($removeImage -eq "yes") {
+    Log-Step "Removing Docker image..."
+    docker rmi ghcr.io/openclaw/openclaw:latest 2>$null
+    Log-Success "Docker image removed"
 }
 
-Write-Host ""
-Write-Host "╔══════════════════════════════════════════════════════════════╗" -ForegroundColor Green
-Write-Host "║                                                              ║" -ForegroundColor Green
-Write-Host "║         KhongAI has been uninstalled successfully! 👋        ║" -ForegroundColor Green
-Write-Host "║                                                              ║" -ForegroundColor Green
-Write-Host "╚══════════════════════════════════════════════════════════════╝" -ForegroundColor Green
+# Stop Telegram bot
+Log-Step "Stopping Telegram bot..."
+Get-Process -Name "node" -ErrorAction SilentlyContinue | Where-Object { $_.StartInfo.Arguments -like "*bot.js*" } | Stop-Process -Force
+taskkill /F /IM node.exe 2>$null
+Log-Success "Bot stopped"
 
-Write-Host ""
-Write-Host "To reinstall KhongAI:" -ForegroundColor White
-Write-Host "  irm https://raw.githubusercontent.com/khongtk2004/khongai-openclaw/main/install.ps1 | iex" -ForegroundColor Cyan
+# Remove installation directories
+Log-Step "Removing installation directories..."
 
+# KhongAI main directory
+$khongaiDir = "$env:USERPROFILE\khongai"
+if (Test-Path $khongaiDir) {
+    Remove-Item -Recurse -Force $khongaiDir -ErrorAction SilentlyContinue
+    Log-Success "Removed $khongaiDir"
+}
+
+# KhongAI data directory
+$khongaiDataDir = "$env:USERPROFILE\.khongai"
+if (Test-Path $khongaiDataDir) {
+    Remove-Item -Recurse -Force $khongaiDataDir -ErrorAction SilentlyContinue
+    Log-Success "Removed $khongaiDataDir"
+}
+
+# Telegram bot directory
+$botDir = "$env:USERPROFILE\khongai-telegram-bot"
+if (Test-Path $botDir) {
+    Remove-Item -Recurse -Force $botDir -ErrorAction SilentlyContinue
+    Log-Success "Removed $botDir"
+}
+
+# Remove management script
+$managerScript = "$env:USERPROFILE\khongai-manager.bat"
+if (Test-Path $managerScript) {
+    Remove-Item -Force $managerScript -ErrorAction SilentlyContinue
+    Log-Success "Removed management script"
+}
+
+# Remove docker-compose file
+$composeFile = "$env:USERPROFILE\khongai\docker-compose.yml"
+if (Test-Path $composeFile) {
+    Remove-Item -Force $composeFile -ErrorAction SilentlyContinue
+}
+
+# Clean up Docker volumes (optional)
+$removeVolumes = Read-Host "Remove Docker volumes as well? (yes/no)"
+if ($removeVolumes -eq "yes") {
+    Log-Step "Removing Docker volumes..."
+    docker volume prune -f 2>$null
+    Log-Success "Docker volumes cleaned"
+}
+
+# Final output
+Write-Host "`n${GREEN}════════════════════════════════════════════════════════════════${NC}"
+Write-Host "${GREEN}✅ KhongAI has been successfully uninstalled!${NC}"
+Write-Host "${GREEN}════════════════════════════════════════════════════════════════${NC}`n"
+
+Write-Host "${YELLOW}Note: The following items were NOT removed:${NC}"
+Write-Host "  - Node.js (if installed separately)"
+Write-Host "  - Docker Desktop (if installed separately)"
+Write-Host "  - npm packages (system-wide)"
 Write-Host ""
-Write-Host "Thank you for using KhongAI! 🦙" -ForegroundColor Yellow
+Write-Host "${CYAN}To manually remove Docker Desktop:${NC}"
+Write-Host "  - Go to 'Add or Remove Programs'"
+Write-Host "  - Find 'Docker Desktop' and uninstall"
 Write-Host ""
+Write-Host "${CYAN}To manually remove Node.js:${NC}"
+Write-Host "  - Go to 'Add or Remove Programs'"
+Write-Host "  - Find 'Node.js' and uninstall"
+Write-Host ""
+
+Log-Success "Uninstall complete!"
+pause
