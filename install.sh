@@ -1,5 +1,5 @@
 #!/bin/bash
-# KhongAI Installer - Complete Docker Setup
+# KhongAI Installer - Fixed Docker Permission Handling
 
 set -e
 
@@ -14,6 +14,7 @@ NC='\033[0m'
 
 # Configuration
 INSTALL_DIR="${KHONGAI_INSTALL_DIR:-$HOME/khongai}"
+DOCKER_GROUP_ADDED=false
 
 print_banner() {
     echo -e "${CYAN}"
@@ -39,20 +40,16 @@ log_error() { echo -e "${RED}✗${NC} $1"; }
 log_warning() { echo -e "${YELLOW}⚠${NC} $1"; }
 log_info() { echo -e "${CYAN}ℹ${NC} $1"; }
 
-# Detect OS distribution
-detect_os() {
-    if [ -f /etc/os-release ]; then
-        . /etc/os-release
-        OS=$ID
-        VER=$VERSION_ID
+# Check if running in Docker group context
+check_docker_group() {
+    if groups | grep -q docker; then
+        return 0
     else
-        OS=$(uname -s)
-        VER=$(uname -r)
+        return 1
     fi
-    log_info "Detected OS: $OS $VER"
 }
 
-# Setup Docker service and permissions
+# Setup Docker service and permissions (without newgrp)
 setup_docker_service() {
     log_step "Setting up Docker service..."
     
@@ -72,91 +69,16 @@ setup_docker_service() {
     log_success "Docker enabled on boot"
     
     # Add user to docker group
-    log_info "Adding user '$USER' to docker group..."
-    sudo usermod -aG docker $USER
-    log_success "User added to docker group"
+    if ! groups | grep -q docker; then
+        log_info "Adding user '$USER' to docker group..."
+        sudo usermod -aG docker $USER
+        DOCKER_GROUP_ADDED=true
+        log_success "User added to docker group"
+    else
+        log_success "User already in docker group"
+    fi
     
     return 0
-}
-
-# Apply Docker group changes without logout
-apply_docker_group() {
-    log_info "Applying Docker group changes..."
-    
-    # Check if user is already in docker group
-    if groups | grep -q docker; then
-        log_success "User already in docker group"
-        return 0
-    fi
-    
-    # Try to apply group changes
-    if command -v newgrp &> /dev/null; then
-        log_info "Using newgrp to apply group changes..."
-        # We'll need to run the rest of the script in a new group context
-        if [ "$FORCE_NEWGRP" != "true" ]; then
-            export FORCE_NEWGRP=true
-            exec newgrp docker <<< "bash $0 $@"
-            exit 0
-        fi
-    else
-        log_warning "newgrp command not found"
-        log_info "Please log out and log back in for Docker permissions to take effect"
-        echo ""
-        echo -e "${YELLOW}After logging back in, run:${NC}"
-        echo "  bash <(curl -fsSL https://raw.githubusercontent.com/khongtk2004/khongai-openclaw/main/install.sh)"
-        echo ""
-        exit 0
-    fi
-}
-
-# Install Node.js based on OS
-install_nodejs() {
-    log_step "Checking Node.js installation..."
-    
-    if command -v node &> /dev/null; then
-        NODE_VERSION=$(node --version)
-        log_success "Node.js already installed: $NODE_VERSION"
-        return 0
-    fi
-    
-    log_info "Node.js not found. Installing..."
-    
-    case $OS in
-        rhel|centos|fedora|rocky|almalinux)
-            log_info "Installing Node.js 18.x for RHEL/CentOS/Fedora..."
-            curl -fsSL https://rpm.nodesource.com/setup_18.x | sudo bash -
-            sudo dnf install -y nodejs
-            ;;
-        ubuntu|debian|linuxmint)
-            log_info "Installing Node.js 18.x for Ubuntu/Debian..."
-            curl -fsSL https://deb.nodesource.com/setup_18.x | sudo -E bash -
-            sudo apt-get install -y nodejs
-            ;;
-        opensuse|suse)
-            log_info "Installing Node.js for openSUSE..."
-            sudo zypper install -y nodejs18
-            ;;
-        arch|manjaro)
-            log_info "Installing Node.js for Arch Linux..."
-            sudo pacman -S --noconfirm nodejs npm
-            ;;
-        *)
-            log_warning "Unsupported OS for automatic Node.js installation: $OS"
-            log_info "Please install Node.js 18+ manually from https://nodejs.org/"
-            read -p "Press Enter after installing Node.js..."
-            ;;
-    esac
-    
-    # Verify installation
-    if command -v node &> /dev/null; then
-        NODE_VERSION=$(node --version)
-        log_success "Node.js installed successfully: $NODE_VERSION"
-        NPM_VERSION=$(npm --version)
-        log_success "npm installed: $NPM_VERSION"
-    else
-        log_error "Node.js installation failed"
-        exit 1
-    fi
 }
 
 # Check Docker accessibility
@@ -185,10 +107,56 @@ wait_for_docker() {
     return 1
 }
 
-print_banner
+# Install Node.js based on OS
+install_nodejs() {
+    log_step "Checking Node.js installation..."
+    
+    if command -v node &> /dev/null; then
+        NODE_VERSION=$(node --version)
+        log_success "Node.js already installed: $NODE_VERSION"
+        return 0
+    fi
+    
+    log_info "Node.js not found. Installing..."
+    
+    if [ -f /etc/os-release ]; then
+        . /etc/os-release
+        OS=$ID
+    else
+        OS=$(uname -s)
+    fi
+    
+    case $OS in
+        rhel|centos|fedora|rocky|almalinux)
+            log_info "Installing Node.js 18.x for RHEL/CentOS/Fedora..."
+            curl -fsSL https://rpm.nodesource.com/setup_18.x | sudo bash -
+            sudo dnf install -y nodejs
+            ;;
+        ubuntu|debian|linuxmint)
+            log_info "Installing Node.js 18.x for Ubuntu/Debian..."
+            curl -fsSL https://deb.nodesource.com/setup_18.x | sudo -E bash -
+            sudo apt-get install -y nodejs
+            ;;
+        *)
+            log_warning "Unsupported OS for automatic Node.js installation"
+            log_info "Please install Node.js 18+ manually from https://nodejs.org/"
+            read -p "Press Enter after installing Node.js..."
+            ;;
+    esac
+    
+    # Verify installation
+    if command -v node &> /dev/null; then
+        NODE_VERSION=$(node --version)
+        log_success "Node.js installed successfully: $NODE_VERSION"
+        NPM_VERSION=$(npm --version)
+        log_success "npm installed: $NPM_VERSION"
+    else
+        log_error "Node.js installation failed"
+        exit 1
+    fi
+}
 
-# Detect OS
-detect_os
+print_banner
 
 # Get Telegram credentials
 echo -e "\n${BOLD}${CYAN}📱 Telegram Bot Setup${NC}\n"
@@ -228,7 +196,6 @@ cat > ~/.khongai/credentials.txt << EOF
 KhongAI Installation Credentials
 ========================================
 Date: $(date)
-OS: $OS $VER
 Telegram Bot Token: ${TELEGRAM_BOT_TOKEN}
 Telegram Username: ${TELEGRAM_USERNAME}
 ========================================
@@ -250,18 +217,10 @@ if ! command -v docker &> /dev/null; then
     # Setup Docker service and permissions
     setup_docker_service
     
-    # Apply group changes
-    apply_docker_group
-    
-    log_success "Docker installed and configured successfully!"
-    
-    # Verify Docker works
-    if check_docker_access; then
-        log_success "Docker is ready to use!"
-    else
-        log_warning "Docker installed but may need group refresh"
-        log_info "Please run: newgrp docker"
-        log_info "Then run the installer again"
+    if [ "$DOCKER_GROUP_ADDED" = true ]; then
+        log_warning "Docker installed and user added to docker group!"
+        log_warning "Please log out and log back in, or run: 'newgrp docker'"
+        log_warning "Then run this installer again: bash <(curl -fsSL https://raw.githubusercontent.com/khongtk2004/khongai-openclaw/main/install.sh)"
         exit 0
     fi
 else
@@ -277,39 +236,31 @@ else
     # Ensure Docker is enabled on boot
     sudo systemctl enable docker 2>/dev/null || true
     
-    # Ensure user is in docker group
+    # Check if user is in docker group
     if ! groups | grep -q docker; then
-        log_info "Adding user to docker group..."
+        log_warning "User not in docker group. Adding..."
         sudo usermod -aG docker $USER
-        apply_docker_group
+        log_warning "Please log out and log back in, then run the installer again"
+        log_warning "Or run: newgrp docker"
+        exit 0
     fi
 fi
 
-# Check Docker daemon status
-log_step "Checking Docker daemon..."
-if ! systemctl is-active --quiet docker 2>/dev/null && ! service docker status &>/dev/null; then
-    log_info "Starting Docker daemon..."
-    sudo systemctl start docker 2>/dev/null || sudo service docker start 2>/dev/null || {
-        log_error "Failed to start Docker. Please start Docker manually."
-        exit 1
-    }
-fi
-
-# Check Docker access
+# Verify Docker access
+log_step "Verifying Docker access..."
 if ! check_docker_access; then
-    log_warning "Cannot connect to Docker daemon"
+    log_warning "Docker not accessible. Attempting to fix..."
     
-    # Try to fix by starting Docker
-    log_info "Attempting to start Docker daemon..."
+    # Try to start Docker
     sudo systemctl start docker 2>/dev/null || sudo service docker start 2>/dev/null
     
-    # Wait for Docker socket
+    # Wait for Docker
     if wait_for_docker; then
         log_success "Docker is now accessible"
     else
-        log_error "Docker is not accessible after multiple attempts"
+        log_error "Docker is still not accessible"
         echo "Please check:"
-        echo "  - Docker service status: sudo systemctl status docker"
+        echo "  - Docker service: sudo systemctl status docker"
         echo "  - User groups: groups $USER"
         echo "  - Docker socket: ls -la /var/run/docker.sock"
         exit 1
@@ -412,7 +363,6 @@ const ADMIN_USERNAME = '${TELEGRAM_USERNAME}';
 
 console.log('🤖 KhongAI Telegram Bot Starting...');
 console.log('📱 Bot Token: ' + token.substring(0, 10) + '...');
-console.log('👤 Admin: @' + (ADMIN_USERNAME || 'Not set'));
 
 bot.onText(/\/start/, (msg) => {
     const chatId = msg.chat.id;
@@ -431,8 +381,6 @@ Your AI assistant is ready to help.
 🤖 KhongAI v1.0
 💡 OpenClaw Gateway
 📡 Telegram Integration
-
-*Need help?* Contact @khongtk2004
     \`;
     
     bot.sendMessage(chatId, welcomeMessage, { parse_mode: 'Markdown' });
@@ -444,73 +392,32 @@ bot.onText(/\/status/, async (msg) => {
         const response = await axios.get(\`\${KHONGAI_URL}/health\`, { timeout: 5000 });
         if (response.status === 200) {
             bot.sendMessage(chatId, '✅ *KhongAI is running!*', { parse_mode: 'Markdown' });
-        } else {
-            bot.sendMessage(chatId, '⚠️ *KhongAI is responding but status unclear*', { parse_mode: 'Markdown' });
         }
     } catch (error) {
-        bot.sendMessage(chatId, '❌ *Cannot connect to KhongAI*\\n\\nMake sure the server is running.', { parse_mode: 'Markdown' });
+        bot.sendMessage(chatId, '❌ *Cannot connect to KhongAI*', { parse_mode: 'Markdown' });
     }
 });
 
 bot.onText(/\/health/, async (msg) => {
     const chatId = msg.chat.id;
-    bot.sendMessage(chatId, '🩺 *Checking KhongAI Health...*', { parse_mode: 'Markdown' });
-    
     try {
         const response = await axios.get(\`\${KHONGAI_URL}/health\`, { timeout: 5000 });
-        const healthMessage = \`
-✅ *KhongAI Health Check*
-
-Status: Healthy
-HTTP Code: \${response.status}
-Response Time: < 5s
-
-*Details:*
-\`\`\`json
-\${JSON.stringify(response.data, null, 2)}
-\`\`\`
-        \`;
-        bot.sendMessage(chatId, healthMessage, { parse_mode: 'Markdown' });
+        bot.sendMessage(chatId, '✅ *KhongAI is healthy*', { parse_mode: 'Markdown' });
     } catch (error) {
-        bot.sendMessage(chatId, '❌ *KhongAI Unreachable*\\n\\nCheck if Docker is running.', { parse_mode: 'Markdown' });
+        bot.sendMessage(chatId, '❌ *KhongAI is not responding*', { parse_mode: 'Markdown' });
     }
 });
 
 bot.onText(/\/info/, (msg) => {
     const chatId = msg.chat.id;
-    const infoMessage = \`
-📊 *KhongAI Information*
-
-*Server:*
-- URL: \${KHONGAI_URL}
-- Type: OpenClaw Gateway
-
-*Bot:*
-- Admin: @\${ADMIN_USERNAME || 'Not configured'}
-- Commands: /start, /status, /health, /info
-
-*Installation:*
-- Directory: ~/khongai
-- Logs: ~/.khongai/logs
-
-*Support:*
-- GitHub: @khongtk2004
-- Telegram: @khongtk2004
-    \`;
-    bot.sendMessage(chatId, infoMessage, { parse_mode: 'Markdown' });
+    bot.sendMessage(chatId, \`📊 *KhongAI Info*\\nServer: \${KHONGAI_URL}\\nAdmin: @\${ADMIN_USERNAME || 'Not set'}\`, { parse_mode: 'Markdown' });
 });
 
 bot.onText(/\/help/, (msg) => {
-    const chatId = msg.chat.id;
-    bot.sendMessage(chatId, 'Send /start to see available commands');
-});
-
-bot.on('polling_error', (error) => {
-    console.log('Polling error:', error.code);
+    bot.sendMessage(msg.chat.id, 'Send /start to see available commands');
 });
 
 console.log('🚀 Bot is polling for messages...');
-console.log('💡 Send /start to your bot on Telegram');
 EOF
 
 # Create start script
@@ -554,7 +461,6 @@ fi
 # Create management script
 cat > ~/khongai-manager.sh << 'EOF'
 #!/bin/bash
-# KhongAI Management Script
 
 GREEN='\033[0;32m'
 RED='\033[0;31m'
@@ -591,7 +497,7 @@ case "$1" in
         tail -f ~/khongai-telegram-bot/bot.log
         ;;
     health)
-        curl -s http://localhost:18789/health | jq . 2>/dev/null || curl -s http://localhost:18789/health
+        curl -s http://localhost:18789/health
         ;;
     *)
         echo "Usage: $0 {start|stop|restart|status|logs|bot-logs|health}"
@@ -628,13 +534,9 @@ if curl -s http://localhost:18789/health > /dev/null 2>&1; then
     log_success "KhongAI is responding!"
 else
     log_warning "KhongAI not responding yet. It may take a few moments."
-    echo "Check with: ~/khongai-manager.sh logs"
 fi
 
-# Test bot
 if pgrep -f "node bot.js" > /dev/null; then
-    log_success "Telegram bot is running and waiting for messages!"
+    log_success "Telegram bot is running!"
     echo -e "\n${GREEN}🎉 Send /start to your Telegram bot to begin!${NC}\n"
-else
-    log_warning "Bot not running. Check with: ~/khongai-manager.sh bot-logs"
 fi
