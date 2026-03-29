@@ -303,6 +303,6 @@ MIT License
 
 <div align="center">
 
-**Made with ❤️ by KhongAI Team**
+**Made with ❤️ by Khong**
 
 </div>
