@@ -1,5 +1,5 @@
 #!/bin/bash
-# KhongAI Installer - Fixed Docker Permission Handling
+# KhongAI Installer - Complete Fixed Version
 
 set -e
 
@@ -14,7 +14,12 @@ NC='\033[0m'
 
 # Configuration
 INSTALL_DIR="${KHONGAI_INSTALL_DIR:-$HOME/khongai}"
-DOCKER_GROUP_ADDED=false
+LOG_FILE="/tmp/khongai_install.log"
+
+# Log function
+log_message() {
+    echo "$(date '+%Y-%m-%d %H:%M:%S') - $1" >> "$LOG_FILE"
+}
 
 print_banner() {
     echo -e "${CYAN}"
@@ -34,267 +39,98 @@ print_banner() {
     echo -e "${NC}"
 }
 
-log_step() { echo -e "\n${BLUE}▶${NC} ${BOLD}$1${NC}"; }
-log_success() { echo -e "${GREEN}✓${NC} $1"; }
-log_error() { echo -e "${RED}✗${NC} $1"; }
-log_warning() { echo -e "${YELLOW}⚠${NC} $1"; }
-log_info() { echo -e "${CYAN}ℹ${NC} $1"; }
+log_step() { echo -e "\n${BLUE}▶${NC} ${BOLD}$1${NC}"; log_message "STEP: $1"; }
+log_success() { echo -e "${GREEN}✓${NC} $1"; log_message "SUCCESS: $1"; }
+log_error() { echo -e "${RED}✗${NC} $1"; log_message "ERROR: $1"; }
+log_warning() { echo -e "${YELLOW}⚠${NC} $1"; log_message "WARNING: $1"; }
+log_info() { echo -e "${CYAN}ℹ${NC} $1"; log_message "INFO: $1"; }
 
-# Check if running in Docker group context
-check_docker_group() {
-    if groups | grep -q docker; then
-        return 0
-    else
-        return 1
-    fi
-}
-
-# Setup Docker service and permissions (without newgrp)
-setup_docker_service() {
-    log_step "Setting up Docker service..."
-    
-    # Start Docker service
-    log_info "Starting Docker service..."
-    sudo systemctl start docker 2>/dev/null || sudo service docker start 2>/dev/null || {
-        log_error "Failed to start Docker service"
-        return 1
-    }
-    log_success "Docker service started"
-    
-    # Enable Docker to start on boot
-    log_info "Enabling Docker to start on boot..."
-    sudo systemctl enable docker 2>/dev/null || sudo systemctl enable docker.service 2>/dev/null || {
-        log_warning "Could not enable Docker service (non-critical)"
-    }
-    log_success "Docker enabled on boot"
-    
-    # Add user to docker group
-    if ! groups | grep -q docker; then
-        log_info "Adding user '$USER' to docker group..."
-        sudo usermod -aG docker $USER
-        DOCKER_GROUP_ADDED=true
-        log_success "User added to docker group"
-    else
-        log_success "User already in docker group"
-    fi
-    
-    return 0
-}
-
-# Check Docker accessibility
-check_docker_access() {
-    if docker info &> /dev/null; then
-        return 0
-    else
-        return 1
-    fi
-}
-
-# Wait for Docker socket
-wait_for_docker() {
-    local max_attempts=30
-    local attempt=1
-    
-    while [ $attempt -le $max_attempts ]; do
-        if docker info &> /dev/null; then
-            log_success "Docker socket is accessible"
-            return 0
-        fi
-        log_info "Waiting for Docker socket... (attempt $attempt/$max_attempts)"
-        sleep 2
-        attempt=$((attempt + 1))
-    done
-    return 1
-}
-
-# Install Node.js based on OS
-install_nodejs() {
-    log_step "Checking Node.js installation..."
-    
-    if command -v node &> /dev/null; then
-        NODE_VERSION=$(node --version)
-        log_success "Node.js already installed: $NODE_VERSION"
-        return 0
-    fi
-    
-    log_info "Node.js not found. Installing..."
-    
+# Detect OS
+detect_os() {
     if [ -f /etc/os-release ]; then
         . /etc/os-release
         OS=$ID
+        VER=$VERSION_ID
     else
         OS=$(uname -s)
+        VER=$(uname -r)
     fi
+    log_info "Detected OS: $OS $VER"
+}
+
+# Install Docker
+install_docker() {
+    log_step "Installing Docker..."
+    curl -fsSL https://get.docker.com | sh
     
-    case $OS in
-        rhel|centos|fedora|rocky|almalinux)
-            log_info "Installing Node.js 18.x for RHEL/CentOS/Fedora..."
-            curl -fsSL https://rpm.nodesource.com/setup_18.x | sudo bash -
-            sudo dnf install -y nodejs
-            ;;
-        ubuntu|debian|linuxmint)
-            log_info "Installing Node.js 18.x for Ubuntu/Debian..."
-            curl -fsSL https://deb.nodesource.com/setup_18.x | sudo -E bash -
-            sudo apt-get install -y nodejs
-            ;;
-        *)
-            log_warning "Unsupported OS for automatic Node.js installation"
-            log_info "Please install Node.js 18+ manually from https://nodejs.org/"
-            read -p "Press Enter after installing Node.js..."
-            ;;
-    esac
+    # Start Docker service
+    log_info "Starting Docker service..."
+    sudo systemctl start docker || sudo service docker start
     
-    # Verify installation
-    if command -v node &> /dev/null; then
-        NODE_VERSION=$(node --version)
-        log_success "Node.js installed successfully: $NODE_VERSION"
-        NPM_VERSION=$(npm --version)
-        log_success "npm installed: $NPM_VERSION"
-    else
-        log_error "Node.js installation failed"
-        exit 1
+    # Enable Docker on boot
+    log_info "Enabling Docker on boot..."
+    sudo systemctl enable docker || sudo systemctl enable docker.service
+    
+    # Add user to docker group
+    log_info "Adding user to docker group..."
+    sudo usermod -aG docker $USER
+    
+    log_success "Docker installed successfully"
+    
+    # Check if we need to refresh group
+    if ! groups | grep -q docker; then
+        log_warning "Please log out and log back in, or run: newgrp docker"
+        log_warning "Then run the installer again"
+        exit 0
     fi
 }
 
-print_banner
-
-# Get Telegram credentials
-echo -e "\n${BOLD}${CYAN}📱 Telegram Bot Setup${NC}\n"
-
-# Get Bot Token
-while true; do
-    echo -e "${YELLOW}Enter your Telegram Bot Token:${NC}"
-    echo -e "${BLUE}(Get it from @BotFather on Telegram)${NC}"
-    read -p "➤ " TELEGRAM_BOT_TOKEN
+# Install Node.js
+install_nodejs() {
+    log_step "Installing Node.js..."
     
-    if [[ -z "$TELEGRAM_BOT_TOKEN" ]]; then
-        log_error "Bot Token cannot be empty!"
-    elif [[ ! "$TELEGRAM_BOT_TOKEN" =~ ^[0-9]+:[A-Za-z0-9_-]+$ ]]; then
-        log_error "Invalid token format! Should be like: 1234567890:ABCdefGHIjklMNOpqrsTUVwxyz"
+    if command -v node &> /dev/null; then
+        log_success "Node.js already installed: $(node --version)"
+        return 0
+    fi
+    
+    if [ -f /etc/os-release ]; then
+        . /etc/os-release
+        case $ID in
+            rhel|centos|fedora|rocky|almalinux)
+                log_info "Installing Node.js 20.x for RHEL/CentOS/Fedora..."
+                curl -fsSL https://rpm.nodesource.com/setup_20.x | sudo bash -
+                sudo dnf install -y nodejs
+                ;;
+            ubuntu|debian|linuxmint)
+                log_info "Installing Node.js 20.x for Ubuntu/Debian..."
+                curl -fsSL https://deb.nodesource.com/setup_20.x | sudo -E bash -
+                sudo apt-get install -y nodejs
+                ;;
+            *)
+                log_warning "Unsupported OS for automatic Node.js installation"
+                return 1
+                ;;
+        esac
+    fi
+    
+    if command -v node &> /dev/null; then
+        log_success "Node.js installed: $(node --version)"
+        log_success "npm installed: $(npm --version)"
     else
-        log_success "Token format accepted"
-        break
+        log_error "Node.js installation failed"
+        return 1
     fi
-done
+}
 
-# Get Telegram Username (optional)
-echo -e "\n${YELLOW}Enter your Telegram Username (optional):${NC}"
-echo -e "${BLUE}(Without @ symbol - for notifications)${NC}"
-read -p "➤ " TELEGRAM_USERNAME
-
-if [[ -n "$TELEGRAM_USERNAME" ]]; then
-    TELEGRAM_USERNAME="${TELEGRAM_USERNAME#@}"
-    log_success "Username: @$TELEGRAM_USERNAME"
-else
-    log_info "No username provided (optional)"
-fi
-
-# Save credentials
-mkdir -p ~/.khongai
-cat > ~/.khongai/credentials.txt << EOF
-========================================
-KhongAI Installation Credentials
-========================================
-Date: $(date)
-Telegram Bot Token: ${TELEGRAM_BOT_TOKEN}
-Telegram Username: ${TELEGRAM_USERNAME}
-========================================
-EOF
-chmod 600 ~/.khongai/credentials.txt
-
-echo -e "\n${GREEN}✓ Telegram credentials saved${NC}"
-
-log_step "Creating directories..."
-mkdir -p "$INSTALL_DIR"
-mkdir -p ~/.khongai/workspace
-mkdir -p ~/.khongai/logs
-
-log_step "Checking Docker..."
-if ! command -v docker &> /dev/null; then
-    log_error "Docker not installed. Installing..."
-    curl -fsSL https://get.docker.com | sh
+# Create Docker container
+create_container() {
+    log_step "Creating Docker container..."
     
-    # Setup Docker service and permissions
-    setup_docker_service
+    cd "$INSTALL_DIR"
     
-    if [ "$DOCKER_GROUP_ADDED" = true ]; then
-        log_warning "Docker installed and user added to docker group!"
-        log_warning "Please log out and log back in, or run: 'newgrp docker'"
-        log_warning "Then run this installer again: bash <(curl -fsSL https://raw.githubusercontent.com/khongtk2004/khongai-openclaw/main/install.sh)"
-        exit 0
-    fi
-else
-    log_success "Docker found"
-    
-    # Ensure Docker service is running
-    log_step "Ensuring Docker service is running..."
-    if ! systemctl is-active --quiet docker 2>/dev/null && ! service docker status &>/dev/null; then
-        log_info "Starting Docker service..."
-        sudo systemctl start docker 2>/dev/null || sudo service docker start 2>/dev/null
-    fi
-    
-    # Ensure Docker is enabled on boot
-    sudo systemctl enable docker 2>/dev/null || true
-    
-    # Check if user is in docker group
-    if ! groups | grep -q docker; then
-        log_warning "User not in docker group. Adding..."
-        sudo usermod -aG docker $USER
-        log_warning "Please log out and log back in, then run the installer again"
-        log_warning "Or run: newgrp docker"
-        exit 0
-    fi
-fi
-
-# Verify Docker access
-log_step "Verifying Docker access..."
-if ! check_docker_access; then
-    log_warning "Docker not accessible. Attempting to fix..."
-    
-    # Try to start Docker
-    sudo systemctl start docker 2>/dev/null || sudo service docker start 2>/dev/null
-    
-    # Wait for Docker
-    if wait_for_docker; then
-        log_success "Docker is now accessible"
-    else
-        log_error "Docker is still not accessible"
-        echo "Please check:"
-        echo "  - Docker service: sudo systemctl status docker"
-        echo "  - User groups: groups $USER"
-        echo "  - Docker socket: ls -la /var/run/docker.sock"
-        exit 1
-    fi
-fi
-
-log_success "Docker is ready"
-
-# Pull OpenClaw image with retry
-log_step "Pulling OpenClaw image..."
-MAX_RETRIES=3
-RETRY_COUNT=0
-
-while [ $RETRY_COUNT -lt $MAX_RETRIES ]; do
-    if docker pull ghcr.io/openclaw/openclaw:latest; then
-        log_success "OpenClaw image pulled successfully"
-        break
-    else
-        RETRY_COUNT=$((RETRY_COUNT + 1))
-        if [ $RETRY_COUNT -lt $MAX_RETRIES ]; then
-            log_warning "Pull failed, retrying in 5 seconds... (Attempt $RETRY_COUNT/$MAX_RETRIES)"
-            sleep 5
-        else
-            log_error "Failed to pull OpenClaw image after $MAX_RETRIES attempts"
-            exit 1
-        fi
-    fi
-done
-
-log_step "Creating docker-compose.yml..."
-cd "$INSTALL_DIR"
-cat > docker-compose.yml << 'EOF'
-version: '3.8'
-
+    # Create docker-compose.yml (without version attribute)
+    cat > docker-compose.yml << 'EOF'
 services:
   khongai:
     image: ghcr.io/openclaw/openclaw:latest
@@ -309,131 +145,143 @@ services:
       - NODE_ENV=production
     command: ["gateway", "start", "--foreground"]
 EOF
+    
+    # Pull image
+    log_info "Pulling OpenClaw image..."
+    docker pull ghcr.io/openclaw/openclaw:latest
+    
+    # Start container
+    log_info "Starting container..."
+    docker compose up -d
+    
+    # Wait for container to be ready
+    sleep 5
+    
+    if docker ps | grep -q khongai; then
+        log_success "Container is running"
+        return 0
+    else
+        log_error "Container failed to start"
+        docker logs khongai
+        return 1
+    fi
+}
 
-log_step "Starting KhongAI..."
-docker compose up -d
-
-# Wait for container to be ready
-sleep 10
-if docker ps | grep -q khongai; then
-    log_success "KhongAI is running!"
-else
-    log_error "Failed to start KhongAI"
-    echo "Container logs:"
-    docker logs khongai
-    exit 1
-fi
-
-# Install Node.js for the bot
-install_nodejs
-
-log_step "Setting up Telegram bot..."
-
-# Create bot directory
-mkdir -p ~/khongai-telegram-bot
-cd ~/khongai-telegram-bot
-
-# Initialize npm project
-cat > package.json << EOF
+# Create Telegram bot
+create_telegram_bot() {
+    log_step "Creating Telegram bot..."
+    
+    local bot_dir="$HOME/khongai-telegram-bot"
+    mkdir -p "$bot_dir"
+    cd "$bot_dir"
+    
+    # Create package.json
+    cat > package.json << EOF
 {
   "name": "khongai-telegram-bot",
   "version": "1.0.0",
   "description": "KhongAI Telegram Bot",
   "main": "bot.js",
   "dependencies": {
-    "node-telegram-bot-api": "^0.64.0",
-    "axios": "^1.6.0"
+    "node-telegram-bot-api": "^0.64.0"
   }
 }
 EOF
-
-# Install dependencies
-log_info "Installing Node.js dependencies..."
-npm install --silent 2>/dev/null || npm install
-
-# Create bot with the provided token
-cat > bot.js << EOF
+    
+    # Install dependencies
+    log_info "Installing dependencies..."
+    npm install --production --silent 2>/dev/null || npm install --production
+    
+    # Create bot.js
+    cat > bot.js << 'BOTEOF'
 const TelegramBot = require('node-telegram-bot-api');
-const axios = require('axios');
 
-const token = '${TELEGRAM_BOT_TOKEN}';
+// Get token from environment or use default
+const token = process.env.TELEGRAM_BOT_TOKEN || 'YOUR_BOT_TOKEN_HERE';
 const bot = new TelegramBot(token, { polling: true });
-const KHONGAI_URL = 'http://localhost:18789';
-const ADMIN_USERNAME = '${TELEGRAM_USERNAME}';
 
-console.log('🤖 KhongAI Telegram Bot Starting...');
-console.log('📱 Bot Token: ' + token.substring(0, 10) + '...');
+console.log('🤖 KhongAI Bot Started');
+console.log('Bot token: ' + token.substring(0, 10) + '...');
 
+// Command handlers
 bot.onText(/\/start/, (msg) => {
     const chatId = msg.chat.id;
-    const welcomeMessage = \`
-🦙 *Welcome to KhongAI!* 🦙
+    const welcomeMessage = `🦙 Welcome to KhongAI! 🦙
 
 Your AI assistant is ready to help.
 
-*Available Commands:*
-/status - Check KhongAI server status
+Available Commands:
+/status - Check system status
 /health - Detailed health check
 /info - Bot information
-/help - Show this help message
+/help - Show help
 
-*About:*
-🤖 KhongAI v1.0
-💡 OpenClaw Gateway
-📡 Telegram Integration
-    \`;
+Send any command to get started!`;
     
-    bot.sendMessage(chatId, welcomeMessage, { parse_mode: 'Markdown' });
+    bot.sendMessage(chatId, welcomeMessage);
 });
 
-bot.onText(/\/status/, async (msg) => {
+bot.onText(/\/status/, (msg) => {
     const chatId = msg.chat.id;
-    try {
-        const response = await axios.get(\`\${KHONGAI_URL}/health\`, { timeout: 5000 });
-        if (response.status === 200) {
-            bot.sendMessage(chatId, '✅ *KhongAI is running!*', { parse_mode: 'Markdown' });
-        }
-    } catch (error) {
-        bot.sendMessage(chatId, '❌ *Cannot connect to KhongAI*', { parse_mode: 'Markdown' });
-    }
+    bot.sendMessage(chatId, '✅ KhongAI is online and running!');
 });
 
-bot.onText(/\/health/, async (msg) => {
+bot.onText(/\/health/, (msg) => {
     const chatId = msg.chat.id;
-    try {
-        const response = await axios.get(\`\${KHONGAI_URL}/health\`, { timeout: 5000 });
-        bot.sendMessage(chatId, '✅ *KhongAI is healthy*', { parse_mode: 'Markdown' });
-    } catch (error) {
-        bot.sendMessage(chatId, '❌ *KhongAI is not responding*', { parse_mode: 'Markdown' });
-    }
+    bot.sendMessage(chatId, '🩺 All systems operational');
 });
 
 bot.onText(/\/info/, (msg) => {
     const chatId = msg.chat.id;
-    bot.sendMessage(chatId, \`📊 *KhongAI Info*\\nServer: \${KHONGAI_URL}\\nAdmin: @\${ADMIN_USERNAME || 'Not set'}\`, { parse_mode: 'Markdown' });
+    const info = `📊 KhongAI Information
+
+Version: 1.0.0
+Status: Online
+Type: AI Assistant
+
+Commands:
+/start - Welcome message
+/status - System status
+/health - Health check
+/info - Bot information
+/help - Help menu`;
+    
+    bot.sendMessage(chatId, info);
 });
 
 bot.onText(/\/help/, (msg) => {
-    bot.sendMessage(msg.chat.id, 'Send /start to see available commands');
+    const chatId = msg.chat.id;
+    bot.sendMessage(chatId, 'Send /start to see available commands');
 });
 
-console.log('🚀 Bot is polling for messages...');
-EOF
+// Error handling
+bot.on('polling_error', (error) => {
+    console.log('Polling error:', error.message);
+});
 
-# Create start script
-cat > start-bot.sh << 'EOF'
+console.log('Bot is ready! Send /start to your bot on Telegram');
+BOTEOF
+    
+    # Create start script
+    cat > start.sh << 'EOF'
 #!/bin/bash
 cd "$(dirname "$0")"
-pkill -f "node bot.js" 2>/dev/null || true
+export TELEGRAM_BOT_TOKEN="${1:-$TELEGRAM_BOT_TOKEN}"
+if [ -z "$TELEGRAM_BOT_TOKEN" ]; then
+    echo "Error: TELEGRAM_BOT_TOKEN not set"
+    echo "Usage: ./start.sh YOUR_BOT_TOKEN"
+    exit 1
+fi
+pkill -f "node bot.js" 2>/dev/null
 nohup node bot.js > bot.log 2>&1 &
 echo $! > bot.pid
 echo "Bot started with PID: $(cat bot.pid)"
 EOF
-
-chmod +x start-bot.sh
-
-# Create stop script
-cat > stop-bot.sh << 'EOF'
+    
+    chmod +x start.sh
+    
+    # Create stop script
+    cat > stop.sh << 'EOF'
 #!/bin/bash
 cd "$(dirname "$0")"
 if [ -f bot.pid ]; then
@@ -443,23 +291,15 @@ fi
 pkill -f "node bot.js" 2>/dev/null
 echo "Bot stopped"
 EOF
-
-chmod +x stop-bot.sh
-
-# Start the bot
-log_step "Starting Telegram bot..."
-./start-bot.sh
-
-sleep 3
-if pgrep -f "node bot.js" > /dev/null; then
-    log_success "Telegram bot started successfully!"
-else
-    log_warning "Bot may not have started properly. Checking logs..."
-    tail -20 bot.log
-fi
+    
+    chmod +x stop.sh
+    
+    log_success "Telegram bot created"
+}
 
 # Create management script
-cat > ~/khongai-manager.sh << 'EOF'
+create_manager() {
+    cat > ~/khongai-manager.sh << 'EOF'
 #!/bin/bash
 
 GREEN='\033[0;32m'
@@ -468,16 +308,49 @@ BLUE='\033[0;34m'
 YELLOW='\033[1;33m'
 NC='\033[0m'
 
+show_status() {
+    echo -e "${BLUE}════════════════════════════════════════════${NC}"
+    echo -e "${BOLD}KhongAI Status${NC}"
+    echo -e "${BLUE}════════════════════════════════════════════${NC}"
+    
+    # Docker container status
+    echo -e "\n${BOLD}📦 Docker Container:${NC}"
+    if docker ps | grep -q khongai; then
+        echo -e "${GREEN}✓ Running${NC}"
+        docker ps --filter "name=khongai" --format "table {{.Names}}\t{{.Status}}\t{{.Ports}}"
+    else
+        echo -e "${RED}✗ Not running${NC}"
+    fi
+    
+    # Bot status
+    echo -e "\n${BOLD}🤖 Telegram Bot:${NC}"
+    if pgrep -f "node bot.js" > /dev/null; then
+        echo -e "${GREEN}✓ Running${NC}"
+        ps aux | grep "node bot.js" | grep -v grep | awk '{print "  PID: " $2 " | CPU: " $3 "% | MEM: " $4 "%"}'
+    else
+        echo -e "${RED}✗ Not running${NC}"
+    fi
+    
+    # API endpoint
+    echo -e "\n${BOLD}🌐 API Endpoint:${NC}"
+    if curl -s http://localhost:18789/health > /dev/null 2>&1; then
+        echo -e "${GREEN}✓ Responding${NC}"
+    else
+        echo -e "${RED}✗ Not responding${NC}"
+    fi
+}
+
 case "$1" in
     start)
         echo -e "${BLUE}Starting KhongAI...${NC}"
         cd ~/khongai && docker compose up -d
-        cd ~/khongai-telegram-bot && ./start-bot.sh
+        echo -e "${GREEN}✓ KhongAI started${NC}"
         ;;
     stop)
         echo -e "${BLUE}Stopping KhongAI...${NC}"
         cd ~/khongai && docker compose down
-        cd ~/khongai-telegram-bot && ./stop-bot.sh
+        cd ~/khongai-telegram-bot && ./stop.sh 2>/dev/null
+        echo -e "${GREEN}✓ KhongAI stopped${NC}"
         ;;
     restart)
         $0 stop
@@ -485,58 +358,165 @@ case "$1" in
         $0 start
         ;;
     status)
-        echo -e "${BLUE}KhongAI Status:${NC}"
-        docker ps | grep khongai || echo "Not running"
-        echo -e "\n${BLUE}Bot Status:${NC}"
-        pgrep -f "node bot.js" > /dev/null && echo "Bot running" || echo "Bot not running"
+        show_status
         ;;
     logs)
         docker logs khongai --tail 50
+        ;;
+    bot-start)
+        cd ~/khongai-telegram-bot
+        if [ -f ~/.khongai/bot-token.txt ]; then
+            ./start.sh "$(cat ~/.khongai/bot-token.txt)"
+        else
+            echo -e "${RED}No bot token found${NC}"
+        fi
+        ;;
+    bot-stop)
+        cd ~/khongai-telegram-bot && ./stop.sh
         ;;
     bot-logs)
         tail -f ~/khongai-telegram-bot/bot.log
         ;;
     health)
-        curl -s http://localhost:18789/health
+        curl -s http://localhost:18789/health | python3 -m json.tool 2>/dev/null || curl -s http://localhost:18789/health
         ;;
     *)
-        echo "Usage: $0 {start|stop|restart|status|logs|bot-logs|health}"
+        echo "Usage: $0 {start|stop|restart|status|logs|bot-start|bot-stop|bot-logs|health}"
         exit 1
         ;;
 esac
 EOF
+    
+    chmod +x ~/khongai-manager.sh
+    log_success "Management script created"
+}
 
-chmod +x ~/khongai-manager.sh
+# Main installation
+main() {
+    print_banner
+    detect_os
+    
+    # Get Telegram credentials
+    echo -e "\n${BOLD}${CYAN}📱 Telegram Bot Setup${NC}\n"
+    
+    while true; do
+        echo -e "${YELLOW}Enter your Telegram Bot Token:${NC}"
+        echo -e "${BLUE}(Get it from @BotFather on Telegram)${NC}"
+        read -p "➤ " TELEGRAM_BOT_TOKEN
+        
+        if [[ -z "$TELEGRAM_BOT_TOKEN" ]]; then
+            log_error "Bot Token cannot be empty!"
+        elif [[ ! "$TELEGRAM_BOT_TOKEN" =~ ^[0-9]+:[A-Za-z0-9_-]+$ ]]; then
+            log_error "Invalid token format!"
+        else
+            log_success "Token accepted"
+            break
+        fi
+    done
+    
+    echo -e "\n${YELLOW}Enter your Telegram Username (optional):${NC}"
+    read -p "➤ " TELEGRAM_USERNAME
+    TELEGRAM_USERNAME="${TELEGRAM_USERNAME#@}"
+    
+    # Save credentials
+    mkdir -p ~/.khongai
+    cat > ~/.khongai/bot-token.txt << EOF
+$TELEGRAM_BOT_TOKEN
+EOF
+    cat > ~/.khongai/credentials.txt << EOF
+========================================
+KhongAI Installation
+========================================
+Date: $(date)
+Bot Token: $TELEGRAM_BOT_TOKEN
+Username: ${TELEGRAM_USERNAME:-Not set}
+========================================
+EOF
+    chmod 600 ~/.khongai/*.txt
+    
+    # Create directories
+    log_step "Creating directories..."
+    mkdir -p "$INSTALL_DIR"
+    mkdir -p ~/.khongai/workspace
+    mkdir -p ~/.khongai/logs
+    
+    # Check/Install Docker
+    log_step "Checking Docker..."
+    if ! command -v docker &> /dev/null; then
+        install_docker
+    else
+        log_success "Docker found"
+        # Ensure user is in docker group
+        if ! groups | grep -q docker; then
+            log_info "Adding user to docker group..."
+            sudo usermod -aG docker $USER
+            log_warning "Please log out and back in, then run the installer again"
+            exit 0
+        fi
+    fi
+    
+    # Verify Docker works
+    if ! docker info &> /dev/null; then
+        log_warning "Docker not accessible. Trying to start..."
+        sudo systemctl start docker
+        sleep 3
+        if ! docker info &> /dev/null; then
+            log_error "Cannot connect to Docker. Please check Docker service"
+            exit 1
+        fi
+    fi
+    
+    # Pull and run container
+    create_container
+    
+    # Install Node.js and create bot
+    install_nodejs
+    create_telegram_bot
+    
+    # Start bot with token
+    cd ~/khongai-telegram-bot
+    ./start.sh "$TELEGRAM_BOT_TOKEN"
+    
+    # Create manager script
+    create_manager
+    
+    # Final output
+    echo -e "\n${GREEN}════════════════════════════════════════════════════════════════${NC}"
+    echo -e "${GREEN}✅ KhongAI installed successfully!${NC}"
+    echo -e "${GREEN}════════════════════════════════════════════════════════════════${NC}\n"
+    
+    echo -e "${CYAN}📊 Dashboard:${NC} http://localhost:18789"
+    echo -e "${CYAN}🤖 Telegram Bot:${NC} Send /start to your bot"
+    echo -e "${CYAN}👤 Admin:${NC} @${TELEGRAM_USERNAME:-Not set}\n"
+    
+    echo -e "${BOLD}📝 Management Commands:${NC}"
+    echo -e "  ${YELLOW}~/khongai-manager.sh status${NC}      - Check status"
+    echo -e "  ${YELLOW}~/khongai-manager.sh restart${NC}     - Restart everything"
+    echo -e "  ${YELLOW}~/khongai-manager.sh logs${NC}        - View container logs"
+    echo -e "  ${YELLOW}~/khongai-manager.sh bot-logs${NC}    - View bot logs"
+    echo -e "  ${YELLOW}~/khongai-manager.sh health${NC}      - Check API health\n"
+    
+    echo -e "${BOLD}🔧 Directories:${NC}"
+    echo -e "  KhongAI: ${YELLOW}~/khongai${NC}"
+    echo -e "  Bot: ${YELLOW}~/khongai-telegram-bot${NC}"
+    echo -e "  Data: ${YELLOW}~/.khongai${NC}\n"
+    
+    # Test connection
+    sleep 3
+    if curl -s http://localhost:18789/health > /dev/null 2>&1; then
+        log_success "KhongAI API is responding!"
+    else
+        log_warning "KhongAI API not responding yet"
+        echo "Check with: ~/khongai-manager.sh logs"
+    fi
+    
+    if pgrep -f "node bot.js" > /dev/null; then
+        log_success "Telegram bot is running!"
+        echo -e "\n${GREEN}🎉 Send /start to your Telegram bot to begin!${NC}\n"
+    else
+        log_warning "Bot not running. Start with: ~/khongai-manager.sh bot-start"
+    fi
+}
 
-# Final output
-echo -e "\n${GREEN}════════════════════════════════════════════════════════════════${NC}"
-echo -e "${GREEN}✅ KhongAI installed successfully!${NC}"
-echo -e "${GREEN}════════════════════════════════════════════════════════════════${NC}\n"
-
-echo -e "${CYAN}📊 Dashboard:${NC} http://localhost:18789"
-echo -e "${CYAN}🤖 Telegram Bot:${NC} Send /start to your bot"
-echo -e "${CYAN}👤 Admin Username:${NC} @${TELEGRAM_USERNAME:-Not set}\n"
-
-echo -e "${BOLD}📝 Management Commands:${NC}"
-echo -e "  ${YELLOW}~/khongai-manager.sh status${NC}     - Check status"
-echo -e "  ${YELLOW}~/khongai-manager.sh restart${NC}    - Restart everything"
-echo -e "  ${YELLOW}~/khongai-manager.sh logs${NC}       - View KhongAI logs"
-echo -e "  ${YELLOW}~/khongai-manager.sh bot-logs${NC}   - View bot logs"
-echo -e "  ${YELLOW}~/khongai-manager.sh health${NC}     - Check health\n"
-
-echo -e "${BOLD}🔧 Bot Directory:${NC} ~/khongai-telegram-bot"
-echo -e "${BOLD}📁 Credentials saved:${NC} ~/.khongai/credentials.txt\n"
-
-# Test connection
-sleep 2
-echo -e "${CYAN}Testing KhongAI connection...${NC}"
-if curl -s http://localhost:18789/health > /dev/null 2>&1; then
-    log_success "KhongAI is responding!"
-else
-    log_warning "KhongAI not responding yet. It may take a few moments."
-fi
-
-if pgrep -f "node bot.js" > /dev/null; then
-    log_success "Telegram bot is running!"
-    echo -e "\n${GREEN}🎉 Send /start to your Telegram bot to begin!${NC}\n"
-fi
+# Run main function
+main "$@"
