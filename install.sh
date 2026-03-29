@@ -1,5 +1,5 @@
 #!/bin/bash
-# ClawBot Installer - Multi-Modal AI with Training from Files
+# ClawBot Installer - Fixed File Processing
 
 set -e
 
@@ -23,9 +23,8 @@ print_banner() {
     echo "║    ╚██████╗███████╗██║  ██║╚███╔███╔╝██████╔╝╚██████╔╝   ██║                 ║"
     echo "║     ╚═════╝╚══════╝╚═╝  ╚═╝ ╚══╝╚══╝ ╚═════╝  ╚═════╝    ╚═╝                 ║"
     echo "║                                                                              ║"
-    echo "║              ClawBot - Multi-Modal AI Assistant                              ║"
-    echo "║         Learn from Text, PDF, Images, and Documents                          ║"
-    echo "║              Ollama + ChatGPT + OpenClaw = ClawBot                           ║"
+    echo "║              ClawBot - Fixed PDF & File Learning                             ║"
+    echo "║                      Learn from ANY document!                                ║"
     echo "║                                                                              ║"
     echo "╚══════════════════════════════════════════════════════════════════════════════╝"
     echo -e "${NC}"
@@ -41,117 +40,65 @@ log_info() { echo -e "${CYAN}ℹ${NC} $1"; }
 install_deps() {
     log_step "Installing system dependencies..."
     
-    # Install zstd
     if ! command -v zstd &> /dev/null; then
         if command -v dnf &> /dev/null; then
-            sudo dnf install -y zstd poppler-utils tesseract tesseract-langpack-eng
+            sudo dnf install -y zstd
         elif command -v apt-get &> /dev/null; then
-            sudo apt-get update && sudo apt-get install -y zstd poppler-utils tesseract-ocr
-        fi
-        log_success "Dependencies installed"
-    else
-        log_success "Dependencies already installed"
-    fi
-    
-    # Install Python for PDF/Image processing
-    if ! command -v python3 &> /dev/null; then
-        if command -v dnf &> /dev/null; then
-            sudo dnf install -y python3 python3-pip
-        elif command -v apt-get &> /dev/null; then
-            sudo apt-get install -y python3 python3-pip
+            sudo apt-get update && sudo apt-get install -y zstd
         fi
     fi
     
-    # Install Python libraries for file processing
-    pip3 install --user PyPDF2 pillow pytesseract pdf2image 2>/dev/null || true
+    # Install Node.js if not present
+    if ! command -v node &> /dev/null; then
+        log_info "Installing Node.js..."
+        curl -fsSL https://rpm.nodesource.com/setup_20.x | sudo bash -
+        sudo dnf install -y nodejs
+    fi
+    
+    log_success "Dependencies installed"
 }
 
 # Get API Keys
 get_api_keys() {
     echo -e "\n${BOLD}${CYAN}🔑 API Configuration${NC}\n"
     
-    # ChatGPT API Key (optional)
     echo -e "${YELLOW}Enter OpenAI ChatGPT API Key (optional, for better responses):${NC}"
     echo -e "${BLUE}(Get from https://platform.openai.com/api-keys)${NC}"
-    echo -e "${BLUE}(Leave empty to use only Ollama)${NC}"
     read -p "➤ " OPENAI_API_KEY
     
     if [[ -n "$OPENAI_API_KEY" ]]; then
         log_success "ChatGPT API enabled"
     else
-        log_info "Using Ollama only (free, local AI)"
+        log_info "Using Ollama only"
     fi
 
-    # Ollama Model Selection
+    # Ollama Model
     echo -e "\n${BOLD}${CYAN}🦙 Ollama Model Selection${NC}\n"
-    echo -e "${YELLOW}Select Ollama model:${NC}"
-    echo "  1) llama2 (7B, balanced - Recommended)"
-    echo "  2) mistral (7B, very capable)"
-    echo "  3) neural-chat (7B, best for conversation)"
-    echo "  4) llama2-uncensored (7B, creative)"
-    read -p "Select [1-4, default: 1]: " model_choice
+    echo "  1) llama2 (Recommended)"
+    echo "  2) mistral"
+    echo "  3) neural-chat"
+    read -p "Select [1-3, default: 1]: " model_choice
 
     case $model_choice in
         2) OLLAMA_MODEL="mistral" ;;
         3) OLLAMA_MODEL="neural-chat" ;;
-        4) OLLAMA_MODEL="llama2-uncensored" ;;
         *) OLLAMA_MODEL="llama2" ;;
     esac
 
     log_success "Ollama model: $OLLAMA_MODEL"
 
-    # ClawBot Personality
-    echo -e "\n${BOLD}${CYAN}🦞 ClawBot Personality${NC}\n"
+    # Bot name
+    echo -e "\n${BOLD}${CYAN}🦞 Bot Name${NC}\n"
     read -p "Enter bot name [default: ClawBot]: " AI_NAME
     AI_NAME=${AI_NAME:-ClawBot}
-    
-    echo -e "${YELLOW}Select personality:${NC}"
-    echo "  1) Friendly & Helpful"
-    echo "  2) Sassy & Witty (ClawBot Style)"
-    echo "  3) Professional & Formal"
-    echo "  4) Creative & Imaginative"
-    read -p "Select [1-4, default: 2]: " personality_choice
 
-    case $personality_choice in
-        1)
-            AI_PERSONALITY="You are $AI_NAME, a friendly, helpful AI assistant. You love helping people learn new things."
-            ;;
-        3)
-            AI_PERSONALITY="You are $AI_NAME, a professional, formal AI assistant. You provide accurate, well-structured information."
-            ;;
-        4)
-            AI_PERSONALITY="You are $AI_NAME, a creative, imaginative AI. You think outside the box and provide unique perspectives."
-            ;;
-        *)
-            AI_PERSONALITY="You are $AI_NAME, a sassy, witty AI assistant with attitude. You're smart, slightly sarcastic, but ultimately helpful. You love learning from documents and files!"
-            ;;
-    esac
-
-    log_success "ClawBot configured: $AI_NAME"
-}
-
-# Install Ollama
-install_ollama() {
-    log_step "Installing Ollama..."
-    
-    if ! command -v ollama &> /dev/null; then
-        curl -fsSL https://ollama.com/install.sh | sh
-    fi
-    
-    sudo systemctl start ollama 2>/dev/null || ollama serve > /dev/null 2>&1 &
-    sleep 3
-    sudo systemctl enable ollama 2>/dev/null || true
-    
-    log_info "Pulling $OLLAMA_MODEL model..."
-    ollama pull $OLLAMA_MODEL
-    
-    log_success "Ollama ready"
+    log_success "Bot configured: $AI_NAME"
 }
 
 # Get admin usernames
 get_admin_usernames() {
     echo -e "\n${BOLD}${CYAN}👥 Admin Users${NC}\n"
-    echo -e "${YELLOW}Enter Telegram usernames (without @):${NC}"
+    echo -e "${YELLOW}Enter Telegram usernames (without @, separated by commas):${NC}"
     read -p "Admin usernames: " ADMIN_USERNAMES_INPUT
 
     IFS=',' read -ra ADMIN_LIST <<< "$ADMIN_USERNAMES_INPUT"
@@ -176,30 +123,46 @@ get_admin_usernames() {
 # Create directories
 create_directories() {
     log_step "Creating directories..."
-    mkdir -p ~/.clawbot/{models,data,chat_history,training_data,logs,uploads,learned}
-    mkdir -p ~/.clawbot/uploads/{text,pdf,images,txt}
+    mkdir -p ~/.clawbot/{models,data,chat_history,training_data,logs,uploads,knowledge}
     mkdir -p ~/clawbot
     mkdir -p ~/clawbot-telegram
     log_success "Directories created"
 }
 
-# Create ClawBot with file learning
+# Install Ollama
+install_ollama() {
+    log_step "Installing Ollama..."
+    
+    if ! command -v ollama &> /dev/null; then
+        curl -fsSL https://ollama.com/install.sh | sh
+    fi
+    
+    sudo systemctl start ollama 2>/dev/null || ollama serve > /dev/null 2>&1 &
+    sleep 5
+    sudo systemctl enable ollama 2>/dev/null || true
+    
+    log_info "Pulling $OLLAMA_MODEL model (this may take several minutes)..."
+    ollama pull $OLLAMA_MODEL
+    
+    log_success "Ollama ready"
+}
+
+# Create ClawBot with fixed file processing
 create_clawbot() {
-    log_step "Creating ClawBot with file learning..."
+    log_step "Creating ClawBot with fixed file processing..."
 
     cd ~/clawbot-telegram
 
     cat > package.json << 'EOF'
 {
   "name": "clawbot",
-  "version": "2.0.0",
+  "version": "3.0.0",
   "dependencies": {
     "node-telegram-bot-api": "^0.64.0",
     "axios": "^1.6.0",
     "sqlite3": "^5.1.6",
-    "multer": "^1.4.5-lts.1",
     "pdf-parse": "^1.1.1",
-    "tesseract.js": "^5.0.0"
+    "mammoth": "^1.4.2"
   }
 }
 EOF
@@ -214,70 +177,19 @@ EOF
     done
     ADMIN_LIST_JSON+="]"
 
-    # Create Python file processor
-    cat > ~/.clawbot/process_file.py << 'PYEOF'
-#!/usr/bin/env python3
-import sys
-import json
-import PyPDF2
-import pytesseract
-from PIL import Image
-import os
-
-def extract_text_from_pdf(pdf_path):
-    text = ""
-    with open(pdf_path, 'rb') as file:
-        reader = PyPDF2.PdfReader(file)
-        for page in reader.pages:
-            text += page.extract_text()
-    return text
-
-def extract_text_from_image(image_path):
-    try:
-        image = Image.open(image_path)
-        text = pytesseract.image_to_string(image)
-        return text
-    except Exception as e:
-        return f"Error extracting text: {e}"
-
-def extract_text_from_txt(txt_path):
-    with open(txt_path, 'r', encoding='utf-8') as file:
-        return file.read()
-
-if __name__ == "__main__":
-    file_path = sys.argv[1]
-    file_ext = os.path.splitext(file_path)[1].lower()
-    
-    if file_ext == '.pdf':
-        text = extract_text_from_pdf(file_path)
-    elif file_ext in ['.jpg', '.jpeg', '.png', '.bmp']:
-        text = extract_text_from_image(file_path)
-    elif file_ext == '.txt':
-        text = extract_text_from_txt(file_path)
-    else:
-        text = "Unsupported file type"
-    
-    print(json.dumps({"text": text[:5000]}))
-PYEOF
-
-    chmod +x ~/.clawbot/process_file.py
-
     cat > bot.js << 'BOTEOF'
 const TelegramBot = require('node-telegram-bot-api');
 const axios = require('axios');
 const sqlite3 = require('sqlite3').verbose();
 const path = require('path');
 const fs = require('fs');
-const { exec } = require('child_process');
-const { promisify } = require('util');
-const execPromise = promisify(exec);
+const pdfParse = require('pdf-parse');
 
 // Configuration
 const token = process.env.TELEGRAM_BOT_TOKEN;
 const openaiApiKey = process.env.OPENAI_API_KEY;
 const ollamaModel = process.env.OLLAMA_MODEL || 'llama2';
 const aiName = process.env.AI_NAME || 'ClawBot';
-const aiPersonality = process.env.AI_PERSONALITY;
 const ADMIN_USERNAMES = JSON.parse(process.env.ADMIN_USERNAMES || '["khongtk2004"]');
 
 const bot = new TelegramBot(token, { polling: true });
@@ -311,41 +223,97 @@ db.serialize(() => {
         timestamp DATETIME DEFAULT CURRENT_TIMESTAMP
     )`);
 
-    db.run(`CREATE TABLE IF NOT EXISTS training_data (
+    db.run(`CREATE TABLE IF NOT EXISTS knowledge_base (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
+        topic TEXT,
         content TEXT,
         source TEXT,
-        trained BOOLEAN DEFAULT 0,
-        created_at DATETIME DEFAULT CURRENT_TIMESTAMP
-    )`);
-
-    db.run(`CREATE TABLE IF NOT EXISTS learned_knowledge (
-        id INTEGER PRIMARY KEY AUTOINCREMENT,
-        topic TEXT UNIQUE,
-        knowledge TEXT,
-        confidence INTEGER DEFAULT 1,
-        created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+        learned_at DATETIME DEFAULT CURRENT_TIMESTAMP
     )`);
 });
 
 // Store conversation history
 const userHistory = new Map();
-const trainingQueue = [];
 
 console.log(`🦞 ${aiName} (ClawBot) Started!`);
 console.log(`Ollama Model: ${ollamaModel}`);
 console.log(`ChatGPT: ${openaiApiKey ? 'Enabled ✅' : 'Disabled'}`);
 
-// Extract text from file
-async function extractTextFromFile(filePath, fileType) {
+// Extract text from PDF
+async function extractPDFText(filePath) {
     try {
-        const { stdout } = await execPromise(`python3 ~/.clawbot/process_file.py "${filePath}"`);
-        const result = JSON.parse(stdout);
-        return result.text;
+        const dataBuffer = fs.readFileSync(filePath);
+        const data = await pdfParse(dataBuffer);
+        return data.text;
     } catch (error) {
-        console.error('File extraction error:', error);
+        console.error('PDF extraction error:', error);
         return null;
     }
+}
+
+// Extract text from TXT
+async function extractTXTText(filePath) {
+    try {
+        return fs.readFileSync(filePath, 'utf8');
+    } catch (error) {
+        console.error('TXT extraction error:', error);
+        return null;
+    }
+}
+
+// Process file and extract text
+async function processFile(filePath, fileName) {
+    const ext = path.extname(fileName).toLowerCase();
+    
+    if (ext === '.pdf') {
+        return await extractPDFText(filePath);
+    } else if (ext === '.txt') {
+        return await extractTXTText(filePath);
+    } else {
+        return null;
+    }
+}
+
+// Learn from text
+async function learnFromText(text, source, userId) {
+    return new Promise((resolve) => {
+        // Split text into chunks
+        const chunks = text.match(/[^.!?]+[.!?]+/g) || [text];
+        let learned = 0;
+        
+        for (const chunk of chunks.slice(0, 50)) {
+            if (chunk.trim().length > 30) {
+                const topic = chunk.substring(0, 100).trim();
+                db.run('INSERT INTO knowledge_base (topic, content, source) VALUES (?, ?, ?)',
+                    [topic, chunk.trim(), source], (err) => {
+                    if (!err) learned++;
+                });
+            }
+        }
+        
+        resolve(learned);
+    });
+}
+
+// Search knowledge base
+async function searchKnowledge(query) {
+    return new Promise((resolve) => {
+        const results = [];
+        db.all('SELECT topic, content FROM knowledge_base', (err, rows) => {
+            if (!rows) return resolve(null);
+            
+            const queryLower = query.toLowerCase();
+            for (const row of rows) {
+                if (row.topic.toLowerCase().includes(queryLower) || 
+                    row.content.toLowerCase().includes(queryLower)) {
+                    results.push(row.content);
+                    if (results.length >= 3) break;
+                }
+            }
+            
+            resolve(results.length > 0 ? results.join('\n\n') : null);
+        });
+    });
 }
 
 // Call ChatGPT API
@@ -354,7 +322,7 @@ async function callChatGPT(userMessage, history) {
     
     try {
         const messages = [
-            { role: 'system', content: aiPersonality },
+            { role: 'system', content: `You are ${aiName}, a helpful AI assistant. Be conversational and engaging.` },
             ...history.slice(-10),
             { role: 'user', content: userMessage }
         ];
@@ -379,10 +347,9 @@ async function callChatGPT(userMessage, history) {
 async function callOllama(userMessage, history, context = '') {
     try {
         const historyText = history.slice(-5).map(h => `${h.role}: ${h.content}`).join('\n');
-        const prompt = `${aiPersonality}
+        const prompt = `You are ${aiName}, a helpful AI assistant.
 
-${context ? `Relevant information from training:\n${context}\n` : ''}
-
+${context ? `Here is relevant information from my knowledge base:\n${context}\n\n` : ''}
 Previous conversation:
 ${historyText}
 
@@ -394,59 +361,19 @@ ${aiName}:`;
             model: ollamaModel,
             prompt: prompt,
             stream: false,
-            options: { temperature: 0.8, num_predict: 600 }
+            options: { temperature: 0.8, num_predict: 500 }
         }, { timeout: 30000 });
         
         return response.data.response.replace(`${aiName}:`, '').trim();
     } catch (error) {
+        console.error('Ollama error:', error.message);
         return null;
     }
 }
 
-// Search learned knowledge
-async function searchKnowledge(query) {
-    return new Promise((resolve) => {
-        db.all('SELECT topic, knowledge FROM learned_knowledge ORDER BY confidence DESC', (err, rows) => {
-            if (!rows) return resolve(null);
-            
-            const relevant = [];
-            const queryLower = query.toLowerCase();
-            
-            for (const row of rows) {
-                if (queryLower.includes(row.topic.toLowerCase()) || 
-                    row.topic.toLowerCase().includes(queryLower)) {
-                    relevant.push(row.knowledge);
-                }
-            }
-            
-            resolve(relevant.length > 0 ? relevant.join('\n\n') : null);
-        });
-    });
-}
-
-// Train AI with content
-async function trainAI(content, source) {
-    return new Promise((resolve) => {
-        db.run('INSERT INTO training_data (content, source) VALUES (?, ?)', [content, source], (err) => {
-            if (!err) {
-                // Process and learn from content
-                const sentences = content.match(/[^.!?]+[.!?]+/g) || [content];
-                for (const sentence of sentences.slice(0, 20)) {
-                    if (sentence.length > 20) {
-                        const topic = sentence.substring(0, 50).toLowerCase();
-                        db.run('INSERT OR REPLACE INTO learned_knowledge (topic, knowledge, confidence) VALUES (?, ?, 1)',
-                            [topic, sentence.trim()]);
-                    }
-                }
-            }
-            resolve();
-        });
-    });
-}
-
 // Get AI response
 async function getAIResponse(userMessage, history) {
-    // Search learned knowledge first
+    // Search knowledge base first
     const knowledge = await searchKnowledge(userMessage);
     
     // Try ChatGPT if available
@@ -455,11 +382,17 @@ async function getAIResponse(userMessage, history) {
         if (chatGPTResponse) return { response: chatGPTResponse, model: 'chatgpt' };
     }
     
-    // Use Ollama with knowledge context
+    // Use Ollama
     const ollamaResponse = await callOllama(userMessage, history, knowledge);
     if (ollamaResponse) return { response: ollamaResponse, model: 'ollama' };
     
-    return { response: `🦞 *snap snap* I'm ${aiName}! Ask me anything or upload files for me to learn!`, model: 'fallback' };
+    // Fallback
+    const fallbacks = [
+        `🦞 *snap snap* I'm ${aiName}! Ask me anything or send me files to learn!`,
+        `Hey there! ${aiName} here. What can I help you with today?`,
+        `*claw click* ${aiName} ready! Send me documents and I'll learn from them!`
+    ];
+    return { response: fallbacks[Math.floor(Math.random() * fallbacks.length)], model: 'fallback' };
 }
 
 // User management
@@ -506,38 +439,32 @@ bot.onText(/\/start/, async (msg) => {
     if (approved || admin) {
         const welcomeMessage = `🦞 *Welcome to ${aiName}!* 🦞
 
-*claw click* Hey ${firstName}! I'm a multi-modal AI that can learn from files!
+*claw click* I can learn from PDF and TXT files!
 
 ━━━━━━━━━━━━━━━━━━━━━
 
 ✨ *What I can do:*
-• 📝 Chat naturally like ChatGPT
-• 📚 Learn from PDF, TXT, and Images
-• 🧠 Remember what you teach me
-• 🔍 Search my knowledge base
-• 💬 Have sassy, engaging conversations
+• 📝 Chat naturally
+• 📚 Learn from PDF documents
+• 📖 Read and remember TXT files
+• 🧠 Search my knowledge base
 
 📋 *Commands:*
 • Send any message to chat
-• /train - Train me on uploaded files
-• /knowledge - Search my knowledge
+• Send PDF/TXT files - I'll learn
+• /knowledge <query> - Search my memory
 • /stats - View my stats
-• /clear - Reset our chat
-
-📁 *File Upload:*
-• Send PDF files - I'll read and learn
-• Send TXT files - I'll remember content
-• Send Images - I'll extract text
+• /clear - Reset chat
 
 ━━━━━━━━━━━━━━━━━━━━━
 
-*Let's learn together!* 🚀`;
+*Send me a PDF or TXT to get started!* 🚀`;
 
         bot.sendMessage(chatId, welcomeMessage, { parse_mode: 'Markdown' });
     } else {
         bot.sendMessage(chatId, `⏳ *Hey ${firstName}!*
 
-You need approval to chat with me. An admin has been notified! 🦞`);
+You need admin approval to chat with me.`);
 
         for (const adminUsername of ADMIN_USERNAMES) {
             bot.sendMessage(chatId, `👥 *New User Request*
@@ -545,27 +472,27 @@ You need approval to chat with me. An admin has been notified! 🦞`);
 **User:** @${username || firstName}
 **ID:** ${userId}
 
-Use: /approve @${username || userId} to approve`);
+Use: /approve @${username || userId}`);
         }
     }
 });
 
-// Handle file uploads (PDF, Images, TXT)
+// Handle document uploads (PDF, TXT)
 bot.on('document', async (msg) => {
     const chatId = msg.chat.id;
     const userId = msg.from.id.toString();
     const fileId = msg.document.file_id;
     const fileName = msg.document.file_name;
-    const fileExt = fileName.split('.').pop().toLowerCase();
+    const fileExt = path.extname(fileName).toLowerCase();
     
     const approved = await isApproved(userId);
     if (!approved) {
-        bot.sendMessage(chatId, "⏳ *Access Pending*\n\nWait for admin approval!");
+        bot.sendMessage(chatId, "⏳ *Access Pending* - Wait for admin approval!");
         return;
     }
     
-    if (!['pdf', 'txt', 'jpg', 'jpeg', 'png'].includes(fileExt)) {
-        bot.sendMessage(chatId, `❌ Unsupported file type: ${fileExt}\n\nSend PDF, TXT, or Image files.`);
+    if (!['.pdf', '.txt'].includes(fileExt)) {
+        bot.sendMessage(chatId, `❌ Unsupported file type: ${fileExt}\n\nPlease send PDF or TXT files only.`);
         return;
     }
     
@@ -575,9 +502,8 @@ bot.on('document', async (msg) => {
         // Download file
         const file = await bot.getFile(fileId);
         const filePath = path.join(UPLOAD_DIR, fileName);
-        
-        // Download file using axios
         const fileUrl = `https://api.telegram.org/file/bot${token}/${file.file_path}`;
+        
         const response = await axios({ method: 'get', url: fileUrl, responseType: 'stream' });
         const writer = fs.createWriteStream(filePath);
         response.data.pipe(writer);
@@ -588,21 +514,33 @@ bot.on('document', async (msg) => {
         });
         
         // Extract text from file
-        const extractedText = await extractTextFromFile(filePath, fileExt);
+        const extractedText = await processFile(filePath, fileName);
         
-        if (extractedText && extractedText.length > 50) {
-            await trainAI(extractedText, fileName);
+        if (extractedText && extractedText.length > 100) {
+            const learnedCount = await learnFromText(extractedText, fileName, userId);
+            
+            const preview = extractedText.substring(0, 300);
             bot.sendMessage(chatId, `✅ *Learning Complete!* 📚
 
 **File:** ${fileName}
-**Content Length:** ${extractedText.length} characters
-**Topics Learned:** ${Math.min(20, Math.floor(extractedText.length / 100))}+
+**Pages/Lines:** ${Math.floor(extractedText.length / 500)} sections
+**Learned:** ${learnedCount} new facts
 
-I've learned from this file and will use this knowledge in our conversations! 🧠
+**Preview:**
+${preview}${extractedText.length > 300 ? '...' : ''}
 
-*Try asking me about what you just taught me!*`);
+*I've added this knowledge to my brain!* 🧠
+
+Try asking: /knowledge about this`);
         } else {
-            bot.sendMessage(chatId, `⚠️ Couldn't extract much text from this file. Try a clearer document or image.`);
+            bot.sendMessage(chatId, `⚠️ Couldn't extract text from this file.
+
+**Possible issues:**
+• PDF might be scanned images (no selectable text)
+• File might be corrupted
+• File is empty
+
+Try a different file with selectable text.`);
         }
         
         // Clean up
@@ -610,93 +548,11 @@ I've learned from this file and will use this knowledge in our conversations! �
         
     } catch (error) {
         console.error('File processing error:', error);
-        bot.sendMessage(chatId, `❌ Error processing file. Please try again.`);
+        bot.sendMessage(chatId, `❌ Error processing file. Please try again with a different file.`);
     }
 });
 
-// Handle photos (images with OCR)
-bot.on('photo', async (msg) => {
-    const chatId = msg.chat.id;
-    const userId = msg.from.id.toString();
-    const photo = msg.photo[msg.photo.length - 1];
-    const fileId = photo.file_id;
-    
-    const approved = await isApproved(userId);
-    if (!approved) {
-        bot.sendMessage(chatId, "⏳ *Access Pending*");
-        return;
-    }
-    
-    bot.sendMessage(chatId, `📸 *Processing image with OCR...*\n\nI'm extracting and learning from this image! 👁️`);
-    
-    try {
-        const file = await bot.getFile(fileId);
-        const filePath = path.join(UPLOAD_DIR, `image_${Date.now()}.jpg`);
-        
-        const fileUrl = `https://api.telegram.org/file/bot${token}/${file.file_path}`;
-        const response = await axios({ method: 'get', url: fileUrl, responseType: 'stream' });
-        const writer = fs.createWriteStream(filePath);
-        response.data.pipe(writer);
-        
-        await new Promise((resolve, reject) => {
-            writer.on('finish', resolve);
-            writer.on('error', reject);
-        });
-        
-        const extractedText = await extractTextFromFile(filePath, 'jpg');
-        
-        if (extractedText && extractedText.length > 20) {
-            await trainAI(extractedText, 'image_ocr');
-            bot.sendMessage(chatId, `✅ *Image Learning Complete!* 📸
-
-**Extracted Text:** ${extractedText.substring(0, 200)}${extractedText.length > 200 ? '...' : ''}
-
-I've learned from this image! 🧠`);
-        } else {
-            bot.sendMessage(chatId, `⚠️ Couldn't read text from this image. Try a clearer picture.`);
-        }
-        
-        fs.unlinkSync(filePath);
-        
-    } catch (error) {
-        console.error('Image processing error:', error);
-        bot.sendMessage(chatId, `❌ Error processing image.`);
-    }
-});
-
-// /train command - Train on all pending files
-bot.onText(/\/train/, async (msg) => {
-    const chatId = msg.chat.id;
-    const userId = msg.from.id.toString();
-    
-    const approved = await isApproved(userId);
-    if (!approved) {
-        bot.sendMessage(chatId, "⏳ *Access Pending*");
-        return;
-    }
-    
-    db.all('SELECT content, source FROM training_data WHERE trained = 0 LIMIT 10', async (err, rows) => {
-        if (!rows || rows.length === 0) {
-            bot.sendMessage(chatId, `📚 *No new files to train on!*\n\nSend me PDF, TXT, or Images to learn from.`);
-            return;
-        }
-        
-        bot.sendMessage(chatId, `🧠 *Training on ${rows.length} items...*\n\nI'm learning and improving!`);
-        
-        for (const row of rows) {
-            await trainAI(row.content, row.source);
-            db.run('UPDATE training_data SET trained = 1 WHERE source = ?', [row.source]);
-        }
-        
-        bot.sendMessage(chatId, `✅ *Training Complete!*
-
-I've learned from ${rows.length} files and integrated the knowledge into my brain!
-
-*My knowledge base is growing!* 🧠🦞`);
-    });
-});
-
-// /knowledge command - Search learned knowledge
+// /knowledge command - Search knowledge base
 bot.onText(/\/knowledge (.+)/, async (msg, match) => {
     const chatId = msg.chat.id;
     const query = match[1];
@@ -708,55 +564,85 @@ bot.onText(/\/knowledge (.+)/, async (msg, match) => {
         return;
     }
     
+    bot.sendMessage(chatId, `🔍 *Searching knowledge base for:* "${query}"`);
+    
     const knowledge = await searchKnowledge(query);
     
     if (knowledge) {
-        bot.sendMessage(chatId, `📚 *Knowledge Found!*
-
-**Query:** ${query}
+        bot.sendMessage(chatId, `📚 *Found in my memory!*
 
 ${knowledge.substring(0, 1500)}
 
-*I learned this from training!* 🧠`);
+*I learned this from uploaded files!* 🧠`);
     } else {
         bot.sendMessage(chatId, `📚 *No knowledge found for:* "${query}"
 
-Teach me by uploading files or using /teach!`);
+Teach me by uploading PDF or TXT files related to this topic!`);
     }
 });
 
-// /teach command
-bot.onText(/\/teach (.+)/, async (msg, match) => {
+// /stats command
+bot.onText(/\/stats/, async (msg) => {
     const chatId = msg.chat.id;
     const userId = msg.from.id.toString();
-    const teachingText = match[1];
-    
+
     const approved = await isApproved(userId);
     if (!approved) {
         bot.sendMessage(chatId, "⏳ *Access Pending*");
         return;
     }
-    
-    const parts = teachingText.split('|');
-    if (parts.length >= 2) {
-        const topic = parts[0].trim();
-        const knowledge = parts[1].trim();
-        
-        db.run('INSERT OR REPLACE INTO learned_knowledge (topic, knowledge, confidence) VALUES (?, ?, 5)', [topic.toLowerCase(), knowledge]);
-        bot.sendMessage(chatId, `📚 *I Learned!*
 
-**Topic:** ${topic}
-**Knowledge:** ${knowledge.substring(0, 200)}${knowledge.length > 200 ? '...' : ''}
+    db.get('SELECT COUNT(*) as total FROM conversations', (err, total) => {
+        db.get('SELECT COUNT(*) as knowledge FROM knowledge_base', (err2, knowledge) => {
+            const statsMessage = `📊 *${aiName} Stats*
 
-Thanks for teaching me! 🧠`);
-    } else {
-        bot.sendMessage(chatId, `📚 *How to teach me:*
+**Conversations:** ${total.total || 0}
+**Knowledge Items:** ${knowledge.knowledge || 0}
+**AI Model:** ${openaiApiKey ? 'ChatGPT + Ollama' : 'Ollama'}
 
-Use: /teach topic | knowledge
+*Send me PDFs to learn!* 📚🦞`;
 
-**Example:**
-/teach What is ClawBot? | ClawBot is an AI that learns from files and conversations!`);
+            bot.sendMessage(chatId, statsMessage, { parse_mode: 'Markdown' });
+        });
+    });
+});
+
+// /clear command
+bot.onText(/\/clear/, async (msg) => {
+    const chatId = msg.chat.id;
+    const userId = msg.from.id.toString();
+
+    const approved = await isApproved(userId);
+    if (!approved) {
+        bot.sendMessage(chatId, "⏳ *Access Pending*");
+        return;
     }
+
+    userHistory.delete(userId);
+    bot.sendMessage(chatId, `🗑️ *Chat cleared!*\n\nStarting fresh! 🦞`);
+});
+
+// /approve command
+bot.onText(/\/approve (.+)/, async (msg, match) => {
+    const chatId = msg.chat.id;
+    const userId = msg.from.id.toString();
+    const username = msg.from.username || '';
+    const target = match[1].replace('@', '');
+
+    if (!(await isAdmin(userId, username))) {
+        bot.sendMessage(chatId, "❌ *Access Denied*");
+        return;
+    }
+
+    db.get('SELECT user_id, username, first_name FROM users WHERE username = ? OR user_id = ?', [target, target], async (err, user) => {
+        if (user) {
+            db.run('UPDATE users SET is_approved = 1 WHERE user_id = ?', [user.user_id]);
+            bot.sendMessage(chatId, `✅ *User Approved*\n\n@${user.username || user.first_name} can now use ClawBot!`);
+            bot.sendMessage(user.user_id, `🎉 *Access Granted!*\n\nYou can now chat with ${aiName}! Send me PDFs to learn!`);
+        } else {
+            bot.sendMessage(chatId, `❌ *User Not Found*`);
+        }
+    });
 });
 
 // Main message handler
@@ -792,72 +678,7 @@ bot.on('message', async (msg) => {
     bot.sendMessage(chatId, result.response);
 });
 
-// /approve command
-bot.onText(/\/approve (.+)/, async (msg, match) => {
-    const chatId = msg.chat.id;
-    const userId = msg.from.id.toString();
-    const username = msg.from.username || '';
-    const target = match[1].replace('@', '');
-
-    if (!(await isAdmin(userId, username))) {
-        bot.sendMessage(chatId, "❌ *Access Denied*");
-        return;
-    }
-
-    db.get('SELECT user_id, username, first_name FROM users WHERE username = ? OR user_id = ?', [target, target], async (err, user) => {
-        if (user) {
-            db.run('UPDATE users SET is_approved = 1 WHERE user_id = ?', [user.user_id]);
-            bot.sendMessage(chatId, `✅ *User Approved*\n\n@${user.username || user.first_name} can now use ClawBot!`);
-            bot.sendMessage(user.user_id, `🎉 *Access Granted!*\n\nYou can now chat with ${aiName}! Send files for me to learn!`);
-        } else {
-            bot.sendMessage(chatId, `❌ *User Not Found*`);
-        }
-    });
-});
-
-// /stats command
-bot.onText(/\/stats/, async (msg) => {
-    const chatId = msg.chat.id;
-    const userId = msg.from.id.toString();
-
-    if (!(await isApproved(userId))) {
-        bot.sendMessage(chatId, "⏳ *Access Pending*");
-        return;
-    }
-
-    db.get('SELECT COUNT(*) as total FROM conversations', (err, total) => {
-        db.get('SELECT COUNT(*) as knowledge FROM learned_knowledge', (err2, knowledge) => {
-            db.get('SELECT COUNT(*) as files FROM training_data', (err3, files) => {
-                const statsMessage = `📊 *${aiName} Stats*
-
-**Conversations:** ${total.total}
-**Knowledge Items:** ${knowledge.knowledge}
-**Files Learned:** ${files.files}
-**AI Model:** ${openaiApiKey ? 'ChatGPT + Ollama' : 'Ollama'}
-
-*Keep teaching me!* 🧠🦞`;
-
-                bot.sendMessage(chatId, statsMessage, { parse_mode: 'Markdown' });
-            });
-        });
-    });
-});
-
-// /clear command
-bot.onText(/\/clear/, async (msg) => {
-    const chatId = msg.chat.id;
-    const userId = msg.from.id.toString();
-
-    if (!(await isApproved(userId))) {
-        bot.sendMessage(chatId, "⏳ *Access Pending*");
-        return;
-    }
-
-    userHistory.delete(userId);
-    bot.sendMessage(chatId, `🗑️ *Chat cleared!*\n\nWe're starting fresh! What's on your mind? 🦞`);
-});
-
-console.log(`🦞 ${aiName} is ready! Send files for me to learn!`);
+console.log(`🦞 ${aiName} is ready! Send me PDF files to learn!`);
 BOTEOF
 
     # Create start script
@@ -867,7 +688,6 @@ export TELEGRAM_BOT_TOKEN="$TELEGRAM_BOT_TOKEN"
 export OPENAI_API_KEY="$OPENAI_API_KEY"
 export OLLAMA_MODEL="$OLLAMA_MODEL"
 export AI_NAME="$AI_NAME"
-export AI_PERSONALITY="$AI_PERSONALITY"
 export ADMIN_USERNAMES='$ADMIN_LIST_JSON'
 
 cd "$HOME/clawbot-telegram"
@@ -889,7 +709,7 @@ EOF
 
     chmod +x stop.sh
 
-    log_success "ClawBot created with file learning!"
+    log_success "ClawBot created with fixed PDF processing!"
 }
 
 # Create management script
@@ -924,21 +744,17 @@ case "$1" in
         echo -e "${BLUE}════════════════════════════════${NC}"
         echo -e "\n🤖 Bot: $(pgrep -f 'node bot.js' > /dev/null && echo 'Running ✅' || echo 'Stopped ❌')"
         echo -e "\n🦙 Ollama: $(curl -s http://localhost:11434/api/tags > /dev/null && echo 'Running ✅' || echo 'Stopped ❌')"
-        echo -e "\n📚 Knowledge: $(sqlite3 ~/.clawbot/chat_history.db 'SELECT COUNT(*) FROM learned_knowledge;' 2>/dev/null) items"
+        echo -e "\n📚 Knowledge: $(sqlite3 ~/.clawbot/chat_history.db 'SELECT COUNT(*) FROM knowledge_base;' 2>/dev/null || echo '0') items"
         ;;
     logs)
         tail -f ~/clawbot-telegram/bot.log
         ;;
-    test)
-        echo -e "${BLUE}Testing Ollama...${NC}"
-        curl -s http://localhost:11434/api/generate -d '{"model":"llama2","prompt":"Say OK","stream":false}' | head -c 100
-        ;;
     knowledge)
         echo -e "${BLUE}Knowledge Base:${NC}"
-        sqlite3 ~/.clawbot/chat_history.db "SELECT topic FROM learned_knowledge ORDER BY confidence DESC LIMIT 20;"
+        sqlite3 ~/.clawbot/chat_history.db "SELECT topic FROM knowledge_base LIMIT 20;" 2>/dev/null
         ;;
     *)
-        echo "Usage: $0 {start|stop|restart|status|logs|test|knowledge}"
+        echo "Usage: $0 {start|stop|restart|status|logs|knowledge}"
         exit 1
         ;;
 esac
@@ -1002,22 +818,19 @@ EOF
     echo -e "${GREEN}════════════════════════════════════════════════════════════════${NC}\n"
 
     echo -e "${CYAN}🦞 ClawBot Features:${NC}"
-    echo "  • 📝 Chat naturally like ChatGPT"
-    echo "  • 📚 Learn from PDF, TXT, and Images"
+    echo "  • 📝 Chat naturally"
+    echo "  • 📚 Learn from PDF files"
+    echo "  • 📖 Read TXT documents"
     echo "  • 🧠 Searchable knowledge base"
-    echo "  • 🔄 Train on uploaded files"
-    echo "  • 👥 User approval system"
     echo ""
-    echo -e "${CYAN}📁 File Learning:${NC}"
-    echo "  • Send PDF - I'll read and learn"
-    echo "  • Send TXT - I'll remember content"
-    echo "  • Send Images - OCR text extraction"
+    echo -e "${CYAN}📁 How to use:${NC}"
+    echo "  1. Send a PDF file - I'll read and learn from it"
+    echo "  2. Ask questions - I'll use what I learned"
+    echo "  3. Use /knowledge <query> - Search my memory"
     echo ""
     echo -e "${CYAN}📋 Commands:${NC}"
-    echo "  • Send any message - Chat with ClawBot"
-    echo "  • /teach topic | text - Teach me directly"
-    echo "  • /knowledge query - Search my knowledge"
-    echo "  • /train - Train on uploaded files"
+    echo "  • Send any message - Chat with me"
+    echo "  • /knowledge <query> - Search my knowledge"
     echo "  • /stats - View statistics"
     echo "  • /clear - Clear conversation"
     echo ""
@@ -1029,7 +842,10 @@ EOF
     echo "  • ~/clawbot-manager.sh logs     - View logs"
     echo "  • ~/clawbot-manager.sh knowledge - View knowledge base"
     echo ""
-    echo -e "${GREEN}🎉 Send /start to your bot and upload files for me to learn!${NC}\n"
+    echo -e "${GREEN}🎉 Send a PDF file to your bot to start teaching it!${NC}\n"
+    
+    echo -e "${YELLOW}⚠️ Important: PDF must have selectable text (not scanned images).${NC}"
+    echo -e "${YELLOW}   For scanned PDFs, convert to text first or use TXT files.${NC}\n"
 }
 
 main "$@"
