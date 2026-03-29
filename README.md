@@ -2,6 +2,8 @@
 
 <div align="center">
 
+![KhongAI Banner](https://www.google.com/imgres?q=luffy&imgurl=https%3A%2F%2Fi.pinimg.com%2F736x%2Fb9%2Fff%2F56%2Fb9ff56209b3d5156c0790e01ecde7abf.jpg&imgrefurl=https%3A%2F%2Fwww.pinterest.com%2Fpin%2Fmonkey-d-luffy-icon--35184440831805673%2F&docid=1fqiTXDcUD9WVM&tbnid=xfGaQ8ilIVu3TM&vet=12ahUKEwjyv9Hb4MSTAxWnwzgGHWyMDkYQnPAOegQIGBAB..i&w=736&h=736&hcb=2&ved=2ahUKEwjyv9Hb4MSTAxWnwzgGHWyMDkYQnPAOegQIGBAB)
+
 ## 🤖 AI Assistant with Telegram Bot Management
 
 Control and configure your AI assistant via Telegram commands from anywhere
@@ -9,6 +11,27 @@ Control and configure your AI assistant via Telegram commands from anywhere
 [Report Bug](https://github.com/khongtk2004/khongai-openclaw/issues) ·
 [Request Feature](https://github.com/khongtk2004/khongai-openclaw/issues) ·
 [Telegram Support](https://t.me/khongtk)
+
+</div>
+
+---
+
+## 📸 Preview
+
+<div align="center">
+
+![Dashboard Preview](https://via.placeholder.com/900x450/1e293b/ffffff?text=KhongAI+Dashboard)
+![Telegram Bot Preview](https://via.placeholder.com/900x450/334155/ffffff?text=Telegram+Bot+Control)
+
+</div>
+
+---
+
+## 🏗️ Architecture
+
+<div align="center">
+
+![Architecture Diagram](https://via.placeholder.com/1000x500/020617/ffffff?text=User+%E2%86%92+Telegram+Bot+%E2%86%92+KhongAI+%E2%86%92+OpenClaw+%E2%86%92+Docker)
 
 </div>
 
@@ -64,8 +87,6 @@ Control and configure your AI assistant via Telegram commands from anywhere
 bash <(curl -fsSL https://raw.githubusercontent.com/khongtk2004/khongai-openclaw/main/install.sh)
 ```
 
----
-
 ### 🪟 Windows (PowerShell - Admin)
 
 ```powershell
@@ -77,18 +98,13 @@ irm https://raw.githubusercontent.com/khongtk2004/khongai-openclaw/main/install.
 ## 📦 Manual Installation
 
 ```bash
-# Clone repository
 git clone https://github.com/khongtk2004/khongai-openclaw.git
 cd khongai-openclaw
 
-# Setup environment
 cp .env.example .env
 nano .env
 
-# Start services
 docker-compose up -d
-
-# Check status
 docker-compose ps
 ```
 
@@ -118,183 +134,29 @@ bash install.sh --verbose
 
 ---
 
-## 🔄 Workflow
-
-1. Run install script
-2. Setup Telegram bot (@BotFather)
-3. Add admin IDs
-4. Start services
-5. Control via Telegram
-
----
-
 ## 🤖 Telegram Commands
 
-### 🔑 Admin Commands
+### 🔑 Admin
 
-| Command     | Description    |
-| ----------- | -------------- |
-| /status     | System status  |
-| /health     | Health check   |
-| /logs       | View logs      |
-| /restart    | Restart system |
-| /model      | Change model   |
-| /config     | View config    |
-| /users      | List users     |
-| /adduser    | Add admin      |
-| /removeuser | Remove admin   |
+| Command  | Description    |
+| -------- | -------------- |
+| /status  | System status  |
+| /logs    | View logs      |
+| /restart | Restart system |
+| /model   | Change model   |
 
-### 👤 User Commands
+### 👤 User
 
 | Command | Description |
 | ------- | ----------- |
 | /start  | Start bot   |
-| /status | Check bot   |
-| /info   | Info        |
 | /help   | Help        |
-
----
-
-## 🔧 Configuration
-
-### `.env`
-
-```env
-TELEGRAM_BOT_TOKEN=your_token
-TELEGRAM_ADMIN_IDS=123456789
-
-AI_MODEL=openclaw-default
-AI_TEMPERATURE=0.7
-AI_MAX_TOKENS=2000
-
-COMPOSE_PROJECT_NAME=khongai
-DOCKER_IMAGE=ghcr.io/openclaw/openclaw:latest
-
-NODE_ENV=production
-LOG_LEVEL=info
-AUTO_RESTART=true
-
-REQUIRE_CONFIRMATION=true
-SESSION_TIMEOUT=3600
-```
-
----
-
-## 📊 Monitoring & Logs
-
-### Log Paths
-
-```bash
-docker logs khongai
-~/khongai-telegram-bot/bot.log
-~/.khongai/logs/system.log
-~/.khongai/logs/error.log
-```
-
-### Commands
-
-```bash
-docker ps
-docker stats khongai
-ps aux | grep node
-```
-
----
-
-## 🛠️ Troubleshooting
-
-### Docker Issues
-
-```bash
-docker logs khongai
-sudo systemctl restart docker
-docker-compose down && docker-compose up -d
-```
-
-### Bot Not Responding
-
-```bash
-ps aux | grep node
-./stop-bot.sh
-./start-bot.sh
-tail -f bot.log
-```
-
-### Permission Issues
-
-```bash
-sudo chown -R $USER:$USER ~/.khongai
-sudo chmod -R 755 ~/.khongai
-sudo usermod -aG docker $USER
-```
-
----
-
-## 🔄 Updating
-
-```bash
-git pull
-docker compose pull
-docker compose up -d
-```
-
----
-
-## 🗑️ Uninstall
-
-```bash
-docker compose down -v
-rm -rf ~/khongai ~/.khongai ~/khongai-telegram-bot
-docker rmi ghcr.io/openclaw/openclaw:latest
-```
-
----
-
-## 📁 Project Structure
-
-```
-khongai-openclaw/
-├── install.sh
-├── install.ps1
-├── docker-compose.yml
-├── .env.example
-├── README.md
-├── scripts/
-```
-
----
-
-## 🤝 Contributing
-
-```bash
-git checkout -b feature/new-feature
-git commit -m "Add feature"
-git push origin feature/new-feature
-```
-
-Then open a Pull Request 🚀
 
 ---
 
 ## 📝 License
 
 MIT License
-
----
-
-## 📞 Support
-
-* Telegram: @khongai_support
-* Issues: GitHub Issues
-
----
-
-## ⭐ Support Project
-
-* ⭐ Star the repo
-* 🐛 Report bugs
-* 💡 Suggest features
-* 🔄 Share project
 
 ---
 
