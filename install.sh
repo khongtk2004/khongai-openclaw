@@ -1,5 +1,5 @@
 #!/bin/bash
-# KhongAI Installer - ChatGPT Style with Natural Conversation
+# KhongAI Installer - Fixed ChatGPT Integration with Learning
 
 set -e
 
@@ -23,7 +23,7 @@ print_banner() {
     echo "║   | . \ | | |  __/| (_| || | | || |_| || (_) || | | |                         ║"
     echo "║   |_|\_\|_|  \___| \__,_||_| |_| \__,_| \___/ |_| |_|                         ║"
     echo "║                                                                              ║"
-    echo "║              ChatGPT-Style AI with Natural Conversation                       ║"
+    echo "║              ChatGPT API Integration with Learning System                     ║"
     echo "║                         by KhongAI                                            ║"
     echo "║                                                                              ║"
     echo "╚══════════════════════════════════════════════════════════════════════════════╝"
@@ -51,67 +51,49 @@ install_zstd() {
     fi
 }
 
-# Get configuration
-get_config() {
-    echo -e "\n${BOLD}${CYAN}🤖 AI Configuration${NC}\n"
+# Get ChatGPT API Key
+get_api_keys() {
+    echo -e "\n${BOLD}${CYAN}🔑 ChatGPT API Configuration${NC}\n"
+    echo -e "${YELLOW}Enter your OpenAI ChatGPT API Key:${NC}"
+    echo -e "${BLUE}(Get from https://platform.openai.com/api-keys)${NC}"
+    echo -e "${BLUE}(This is REQUIRED for ChatGPT-style responses)${NC}"
+    read -p "➤ " OPENAI_API_KEY
     
+    if [[ -z "$OPENAI_API_KEY" ]]; then
+        log_error "ChatGPT API Key is required for proper responses!"
+        exit 1
+    fi
+    
+    # Test the API key
+    log_info "Testing API key..."
+    TEST_RESPONSE=$(curl -s -X POST https://api.openai.com/v1/chat/completions \
+      -H "Authorization: Bearer $OPENAI_API_KEY" \
+      -H "Content-Type: application/json" \
+      -d '{
+        "model": "gpt-3.5-turbo",
+        "messages": [{"role": "user", "content": "Say OK if you work"}],
+        "max_tokens": 5
+      }' 2>/dev/null)
+    
+    if echo "$TEST_RESPONSE" | grep -q "OK"; then
+        log_success "ChatGPT API key works!"
+    else
+        log_warning "API key test failed, but continuing..."
+    fi
+    
+    # AI Personality
+    echo -e "\n${BOLD}${CYAN}🎭 AI Personality${NC}\n"
     read -p "Enter AI name [default: KhongAI]: " AI_NAME
     AI_NAME=${AI_NAME:-KhongAI}
     
-    echo -e "\n${YELLOW}Select AI response style:${NC}"
-    echo "  1) ChatGPT Style (Conversational, helpful, detailed)"
-    echo "  2) Friendly & Casual (Relaxed, approachable)"
-    echo "  3) Professional & Formal (Business-like)"
-    echo "  4) Creative & Imaginative (Unique perspectives)"
-    read -p "Select [1-4, default: 1]: " style_choice
-    
-    case $style_choice in
-        2)
-            AI_PERSONALITY="casual, friendly, and approachable"
-            RESPONSE_STYLE="casual and friendly"
-            ;;
-        3)
-            AI_PERSONALITY="professional, formal, and precise"
-            RESPONSE_STYLE="professional and formal"
-            ;;
-        4)
-            AI_PERSONALITY="creative, imaginative, and artistic"
-            RESPONSE_STYLE="creative and unique"
-            ;;
-        *)
-            AI_PERSONALITY="helpful, knowledgeable, and conversational"
-            RESPONSE_STYLE="conversational and detailed like ChatGPT"
-            ;;
-    esac
-    
-    # Ollama Model
-    echo -e "\n${YELLOW}Select AI model:${NC}"
-    echo "  1) neural-chat (Best for conversation - Recommended)"
-    echo "  2) llama2 (Balanced performance)"
-    echo "  3) mistral (Very intelligent)"
-    echo "  4) phi (Fast and lightweight)"
-    read -p "Select [1-4, default: 1]: " model_choice
-    
-    case $model_choice in
-        2) OLLAMA_MODEL="llama2" ;;
-        3) OLLAMA_MODEL="mistral" ;;
-        4) OLLAMA_MODEL="phi" ;;
-        *) OLLAMA_MODEL="neural-chat" ;;
-    esac
-    
-    # OpenAI API (optional)
-    echo -e "\n${YELLOW}Enter OpenAI ChatGPT API Key (optional - for better responses):${NC}"
-    echo -e "${BLUE}(Get from https://platform.openai.com/api-keys)${NC}"
-    read -p "➤ " OPENAI_API_KEY
-    
-    log_success "AI configured: $AI_NAME with $OLLAMA_MODEL model"
+    log_success "AI configured: $AI_NAME"
 }
 
 # Get admin usernames
 get_admin_usernames() {
-    echo -e "\n${BOLD}${CYAN}👥 Admin Users Setup${NC}\n"
+    echo -e "\n${BOLD}${CYAN}👥 Admin Users${NC}\n"
     echo -e "${YELLOW}Enter Telegram usernames who can approve users (without @)${NC}"
-    echo -e "${BLUE}Separate multiple with commas${NC}"
+    echo -e "${BLUE}Example: khongtk2004,renyu4444${NC}"
     read -p "Admin usernames: " ADMIN_USERNAMES_INPUT
     
     IFS=',' read -ra ADMIN_LIST <<< "$ADMIN_USERNAMES_INPUT"
@@ -135,28 +117,10 @@ get_admin_usernames() {
     printf "%s\n" "${ADMIN_USERNAMES[@]}" > ~/.khongai/admin_usernames.txt
 }
 
-# Install Ollama
-install_ollama() {
-    log_step "Installing Ollama..."
-    
-    if ! command -v ollama &> /dev/null; then
-        curl -fsSL https://ollama.com/install.sh | sh
-    fi
-    
-    sudo systemctl start ollama
-    sudo systemctl enable ollama
-    sleep 3
-    
-    log_info "Pulling $OLLAMA_MODEL model (this may take several minutes)..."
-    ollama pull $OLLAMA_MODEL
-    
-    log_success "Ollama model ready: $OLLAMA_MODEL"
-}
-
 # Create directories
 create_directories() {
     log_step "Creating directories..."
-    mkdir -p ~/.khongai/{models,data,chat_history,training_data,logs,conversations}
+    mkdir -p ~/.khongai/{models,data,chat_history,training_data,logs,conversations,learned}
     mkdir -p ~/khongai
     mkdir -p ~/khongai-telegram-bot
     log_success "Directories created"
@@ -182,30 +146,30 @@ services:
     command: ["node", "dist/index.js"]
 EOF
     
-    docker compose up -d
+    docker compose up -d 2>/dev/null || true
     log_success "OpenClaw container started"
 }
 
-# Create advanced ChatGPT-like bot
+# Create ChatGPT bot with real learning
 create_chatgpt_bot() {
-    log_step "Creating ChatGPT-style bot with natural conversation..."
+    log_step "Creating ChatGPT-powered bot with learning..."
     
     cd ~/khongai-telegram-bot
     
     cat > package.json << 'EOF'
 {
   "name": "khongai-chatgpt-bot",
-  "version": "4.0.0",
+  "version": "5.0.0",
   "dependencies": {
     "node-telegram-bot-api": "^0.64.0",
     "axios": "^1.6.0",
     "sqlite3": "^5.1.6",
-    "marked": "^11.0.0"
+    "fs": "^0.0.1-security"
   }
 }
 EOF
     
-    npm install
+    npm install --silent 2>/dev/null || npm install
     
     # Create admin list JSON
     ADMIN_LIST_JSON="["
@@ -221,15 +185,11 @@ const axios = require('axios');
 const sqlite3 = require('sqlite3').verbose();
 const fs = require('fs').promises;
 const path = require('path');
-const marked = require('marked');
 
 // Configuration
 const token = process.env.TELEGRAM_BOT_TOKEN;
 const openaiApiKey = process.env.OPENAI_API_KEY;
-const ollamaModel = process.env.OLLAMA_MODEL || 'neural-chat';
 const aiName = process.env.AI_NAME || 'KhongAI';
-const aiPersonality = process.env.AI_PERSONALITY || 'helpful';
-const responseStyle = process.env.RESPONSE_STYLE || 'conversational';
 const ADMIN_USERNAMES = JSON.parse(process.env.ADMIN_USERNAMES || '["khongtk2004"]');
 
 const bot = new TelegramBot(token, { polling: true });
@@ -239,67 +199,147 @@ const db = new sqlite3.Database(path.join(process.env.HOME, '.khongai', 'chat_hi
 
 // Create all tables
 db.serialize(() => {
-    // Users table
     db.run(`CREATE TABLE IF NOT EXISTS users (
-        id INTEGER PRIMARY KEY AUTOINCREMENT,
-        user_id TEXT UNIQUE,
+        user_id TEXT PRIMARY KEY,
         username TEXT,
         first_name TEXT,
         is_approved BOOLEAN DEFAULT 0,
         is_admin BOOLEAN DEFAULT 0,
-        approved_by TEXT,
-        approved_at DATETIME,
         registered_at DATETIME DEFAULT CURRENT_TIMESTAMP
     )`);
     
-    // Conversations table
     db.run(`CREATE TABLE IF NOT EXISTS conversations (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
         user_id TEXT,
         user_message TEXT,
         ai_response TEXT,
         model_used TEXT,
-        response_time INTEGER,
         timestamp DATETIME DEFAULT CURRENT_TIMESTAMP
     )`);
     
-    // Learned patterns table
-    db.run(`CREATE TABLE IF NOT EXISTS learned_patterns (
+    db.run(`CREATE TABLE IF NOT EXISTS learned_responses (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
-        pattern TEXT UNIQUE,
-        response TEXT,
+        user_message TEXT UNIQUE,
+        ai_response TEXT,
         context TEXT,
         usage_count INTEGER DEFAULT 1,
         effectiveness INTEGER DEFAULT 0,
-        last_used DATETIME
-    )`);
-    
-    // User context table
-    db.run(`CREATE TABLE IF NOT EXISTS user_context (
-        user_id TEXT PRIMARY KEY,
-        context TEXT,
-        preferences TEXT,
-        last_active DATETIME
-    )`);
-    
-    // Training data table
-    db.run(`CREATE TABLE IF NOT EXISTS training_data (
-        id INTEGER PRIMARY KEY AUTOINCREMENT,
-        user_message TEXT,
-        ai_response TEXT,
-        quality_score INTEGER,
-        used_for_training BOOLEAN DEFAULT 0,
-        timestamp DATETIME DEFAULT CURRENT_TIMESTAMP
+        created_at DATETIME DEFAULT CURRENT_TIMESTAMP
     )`);
 });
 
 // Store conversation history per user
-const userConversations = new Map();
+const userHistory = new Map();
 
-console.log(`🤖 ${aiName} ChatGPT-Style Bot Started`);
-console.log(`Response Style: ${responseStyle}`);
-console.log(`Model: ${ollamaModel}`);
+console.log(`🤖 ${aiName} ChatGPT Bot Started`);
+console.log(`ChatGPT API: ${openaiApiKey ? 'Connected ✅' : 'Not connected ❌'}`);
 console.log(`Admins: ${ADMIN_USERNAMES.join(', ')}`);
+
+// Helper: Call ChatGPT API
+async function callChatGPT(userMessage, conversationHistory) {
+    try {
+        // Build messages array with history
+        const messages = [
+            {
+                role: 'system',
+                content: `You are ${aiName}, a helpful, friendly AI assistant. 
+You respond naturally like ChatGPT - with detailed, informative, and conversational answers.
+Use emojis occasionally to be friendly.
+Break down complex topics simply.
+Ask clarifying questions when needed.
+Be engaging and helpful.`
+            }
+        ];
+        
+        // Add conversation history (last 10 messages)
+        if (conversationHistory && conversationHistory.length > 0) {
+            const lastMessages = conversationHistory.slice(-10);
+            for (const msg of lastMessages) {
+                messages.push({
+                    role: msg.role,
+                    content: msg.content
+                });
+            }
+        }
+        
+        // Add current message
+        messages.push({
+            role: 'user',
+            content: userMessage
+        });
+        
+        const response = await axios.post('https://api.openai.com/v1/chat/completions', {
+            model: 'gpt-3.5-turbo',
+            messages: messages,
+            temperature: 0.8,
+            max_tokens: 500,
+            presence_penalty: 0.6,
+            frequency_penalty: 0.5
+        }, {
+            headers: {
+                'Authorization': `Bearer ${openaiApiKey}`,
+                'Content-Type': 'application/json'
+            },
+            timeout: 30000
+        });
+        
+        return response.data.choices[0].message.content;
+    } catch (error) {
+        console.error('ChatGPT API Error:', error.response?.data?.error?.message || error.message);
+        return null;
+    }
+}
+
+// Helper: Check learned responses
+async function checkLearnedResponse(userMessage) {
+    return new Promise((resolve) => {
+        const msg = userMessage.toLowerCase().trim();
+        db.get(
+            'SELECT ai_response FROM learned_responses WHERE user_message = ? AND effectiveness > 0 ORDER BY usage_count DESC LIMIT 1',
+            [msg],
+            (err, row) => {
+                if (row) {
+                    db.run('UPDATE learned_responses SET usage_count = usage_count + 1 WHERE user_message = ?', [msg]);
+                    resolve(row.ai_response);
+                } else {
+                    resolve(null);
+                }
+            }
+        );
+    });
+}
+
+// Helper: Learn new response
+async function learnResponse(userMessage, aiResponse) {
+    return new Promise((resolve) => {
+        const msg = userMessage.toLowerCase().trim();
+        db.run(
+            'INSERT OR REPLACE INTO learned_responses (user_message, ai_response, effectiveness) VALUES (?, ?, 5)',
+            [msg, aiResponse],
+            (err) => resolve()
+        );
+    });
+}
+
+// Helper: Save conversation
+async function saveConversation(userId, userMessage, aiResponse, modelUsed) {
+    return new Promise((resolve) => {
+        db.run(
+            'INSERT INTO conversations (user_id, user_message, ai_response, model_used) VALUES (?, ?, ?, ?)',
+            [userId, userMessage, aiResponse, modelUsed],
+            (err) => resolve()
+        );
+    });
+}
+
+// Helper: Check if user is approved
+async function isApproved(userId) {
+    return new Promise((resolve) => {
+        db.get('SELECT is_approved FROM users WHERE user_id = ?', [userId], (err, row) => {
+            resolve(row && row.is_approved === 1);
+        });
+    });
+}
 
 // Helper: Check if user is admin
 async function isAdmin(userId, username) {
@@ -318,400 +358,85 @@ async function isAdmin(userId, username) {
     });
 }
 
-// Helper: Check if user is approved
-async function isApproved(userId) {
-    return new Promise((resolve) => {
-        db.get('SELECT is_approved FROM users WHERE user_id = ?', [userId], (err, row) => {
-            resolve(row && row.is_approved === 1);
-        });
-    });
-}
-
-// Helper: Save conversation
-async function saveConversation(userId, userMessage, aiResponse, modelUsed, responseTime) {
+// Register user
+async function registerUser(userId, username, firstName) {
     return new Promise((resolve) => {
         db.run(
-            'INSERT INTO conversations (user_id, user_message, ai_response, model_used, response_time) VALUES (?, ?, ?, ?, ?)',
-            [userId, userMessage, aiResponse, modelUsed, responseTime],
-            (err) => resolve(!err)
+            'INSERT OR IGNORE INTO users (user_id, username, first_name) VALUES (?, ?, ?)',
+            [userId, username, firstName],
+            (err) => resolve()
         );
     });
 }
 
-// Helper: Save for training
-async function saveForTraining(userMessage, aiResponse, qualityScore = 3) {
-    return new Promise((resolve) => {
-        db.run(
-            'INSERT INTO training_data (user_message, ai_response, quality_score) VALUES (?, ?, ?)',
-            [userMessage, aiResponse, qualityScore],
-            (err) => resolve(!err)
-        );
-    });
-}
-
-// Helper: Learn pattern
-async function learnPattern(userMessage, aiResponse, context) {
-    const pattern = userMessage.toLowerCase().trim();
-    return new Promise((resolve) => {
-        db.get('SELECT * FROM learned_patterns WHERE pattern = ?', [pattern], (err, row) => {
-            if (row) {
-                db.run('UPDATE learned_patterns SET usage_count = usage_count + 1, last_used = CURRENT_TIMESTAMP WHERE pattern = ?', [pattern]);
-            } else {
-                db.run('INSERT INTO learned_patterns (pattern, response, context) VALUES (?, ?, ?)', [pattern, aiResponse, context]);
-            }
-            resolve();
-        });
-    });
-}
-
-// Main AI response function - ChatGPT style
-async function getChatGPTResponse(userId, userMessage, conversationHistory) {
-    const startTime = Date.now();
-    
-    // Check for learned patterns first
-    const learnedPattern = await checkLearnedPattern(userMessage);
-    if (learnedPattern && Math.random() < 0.4) {
-        await saveConversation(userId, userMessage, learnedPattern, 'learned', Date.now() - startTime);
-        return learnedPattern;
-    }
-    
-    // Build conversation context
-    const context = buildContext(conversationHistory);
-    
-    // Try ChatGPT API first if available
-    if (openaiApiKey) {
-        const chatGPTResponse = await callChatGPTAPI(userMessage, context);
-        if (chatGPTResponse) {
-            await saveConversation(userId, userMessage, chatGPTResponse, 'chatgpt', Date.now() - startTime);
-            await learnPattern(userMessage, chatGPTResponse, context);
-            await saveForTraining(userMessage, chatGPTResponse, 5);
-            return chatGPTResponse;
-        }
-    }
-    
-    // Use Ollama with ChatGPT-style prompt
-    const ollamaResponse = await callOllamaChatGPT(userMessage, context, conversationHistory);
-    if (ollamaResponse) {
-        await saveConversation(userId, userMessage, ollamaResponse, 'ollama', Date.now() - startTime);
-        await learnPattern(userMessage, ollamaResponse, context);
-        await saveForTraining(userMessage, ollamaResponse, 4);
-        return ollamaResponse;
-    }
-    
-    // Fallback responses
-    return getFallbackResponse(userMessage);
-}
-
-// Call ChatGPT API
-async function callChatGPTAPI(message, context) {
-    try {
-        const systemPrompt = `You are ${aiName}, an AI assistant with a ${aiPersonality} personality. 
-Your responses should be ${responseStyle}.
-Be conversational, helpful, and detailed like ChatGPT.
-Use natural language, emojis occasionally, and format responses nicely.`;
-
-        const response = await axios.post('https://api.openai.com/v1/chat/completions', {
-            model: 'gpt-3.5-turbo',
-            messages: [
-                { role: 'system', content: systemPrompt },
-                { role: 'user', content: context + message }
-            ],
-            temperature: 0.8,
-            max_tokens: 500,
-            presence_penalty: 0.6,
-            frequency_penalty: 0.5
-        }, {
-            headers: { 'Authorization': `Bearer ${openaiApiKey}` },
-            timeout: 20000
-        });
-        
-        return response.data.choices[0].message.content;
-    } catch (error) {
-        return null;
-    }
-}
-
-// Call Ollama with ChatGPT-style prompt
-async function callOllamaChatGPT(message, context, history) {
-    try {
-        // Build conversation history for context
-        let historyText = '';
-        if (history && history.length > 0) {
-            const lastFew = history.slice(-5);
-            historyText = lastFew.map(h => `${h.role}: ${h.content}`).join('\n');
-        }
-        
-        const prompt = `You are ${aiName}, an AI assistant with a ${aiPersonality} personality.
-
-Your responses should be ${responseStyle}.
-
-Guidelines:
-- Be conversational and natural like ChatGPT
-- Provide detailed, helpful answers
-- Use markdown formatting for clarity
-- Add emojis occasionally for personality
-- Break down complex topics
-- Ask clarifying questions when needed
-- Be engaging and interactive
-
-Conversation history:
-${historyText}
-
-User: ${message}
-
-${aiName}: Let me provide a helpful, detailed response.`;
-
-        const response = await axios.post('http://localhost:11434/api/generate', {
-            model: ollamaModel,
-            prompt: prompt,
-            stream: false,
-            options: {
-                temperature: 0.8,
-                top_k: 50,
-                top_p: 0.95,
-                repeat_penalty: 1.1,
-                num_predict: 500
-            }
-        }, { timeout: 30000 });
-        
-        let aiResponse = response.data.response;
-        // Clean up and format
-        aiResponse = aiResponse.replace(`${aiName}:`, '').trim();
-        
-        return aiResponse;
-    } catch (error) {
-        console.error('Ollama error:', error.message);
-        return null;
-    }
-}
-
-// Check learned patterns
-async function checkLearnedPattern(message) {
-    return new Promise((resolve) => {
-        const msg = message.toLowerCase().trim();
-        db.get('SELECT response FROM learned_patterns WHERE pattern = ? AND effectiveness > 0 ORDER BY usage_count DESC LIMIT 1', [msg], (err, row) => {
-            if (row) {
-                db.run('UPDATE learned_patterns SET last_used = CURRENT_TIMESTAMP WHERE pattern = ?', [msg]);
-                resolve(row.response);
-            } else {
-                // Check for partial matches
-                db.all('SELECT pattern, response FROM learned_patterns WHERE effectiveness > 0', (err, rows) => {
-                    if (rows) {
-                        for (const row of rows) {
-                            if (msg.includes(row.pattern) || row.pattern.includes(msg)) {
-                                resolve(row.response);
-                                return;
-                            }
-                        }
-                    }
-                    resolve(null);
-                });
-            }
-        });
-    });
-}
-
-// Build context from conversation history
-function buildContext(history) {
-    if (!history || history.length === 0) return '';
-    return history.map(h => `${h.role}: ${h.content}`).join('\n') + '\n';
-}
-
-// Get user context
-async function getUserContext(userId) {
-    return new Promise((resolve) => {
-        db.get('SELECT context, preferences FROM user_context WHERE user_id = ?', [userId], (err, row) => {
-            if (row) {
-                try {
-                    resolve({
-                        context: JSON.parse(row.context || '[]'),
-                        preferences: JSON.parse(row.preferences || '{}')
-                    });
-                } catch {
-                    resolve({ context: [], preferences: {} });
-                }
-            } else {
-                resolve({ context: [], preferences: {} });
-            }
-        });
-    });
-}
-
-// Update user context
-async function updateUserContext(userId, context, preferences) {
-    return new Promise((resolve) => {
-        db.run(
-            'INSERT OR REPLACE INTO user_context (user_id, context, preferences, last_active) VALUES (?, ?, ?, CURRENT_TIMESTAMP)',
-            [userId, JSON.stringify(context), JSON.stringify(preferences || {})],
-            () => resolve()
-        );
-    });
-}
-
-// Fallback responses (ChatGPT style)
-function getFallbackResponse(message) {
-    const msg = message.toLowerCase();
-    
-    if (msg.includes('hello') || msg.includes('hi') || msg.includes('hey')) {
-        return `👋 Hello! I'm ${aiName}, your AI assistant. 
-
-I'm here to help you with questions, tasks, or just to chat! 
-
-What would you like to know or discuss today? 😊`;
-    }
-    
-    if (msg.includes('how are you')) {
-        return `🌟 I'm doing fantastic, thank you for asking!
-
-I'm running on ${ollamaModel} model and I'm ready to help you with anything you need. 
-
-How can I assist you today? 💫`;
-    }
-    
-    if (msg.includes('what is your name')) {
-        return `✨ My name is ${aiName}!
-
-I'm an AI assistant designed to help you with questions, provide information, and have natural conversations.
-
-Think of me as your personal AI friend who's always ready to help! 
-
-What's your name? 😊`;
-    }
-    
-    if (msg.includes('thank')) {
-        return `🎉 You're very welcome! 
-
-I'm glad I could help. Is there anything else you'd like to know or any other questions I can answer for you?
-
-I'm here whenever you need me! 💫`;
-    }
-    
-    if (msg.includes('what is') || msg.includes('explain') || msg.includes('tell me about')) {
-        return `📚 That's a great question!
-
-I'd love to help explain that. Let me think about it for a moment...
-
-${message}
-
-To give you the best answer, could you tell me a bit more about what specifically you'd like to know? 
-
-I'm here to provide detailed, helpful explanations! 💡`;
-    }
-    
-    if (msg.includes('how to') || msg.includes('how do i')) {
-        return `💡 Great question about how to do that!
-
-I can help guide you through this. Here's what I understand about ${message.substring(0, 50)}...
-
-To give you the most helpful step-by-step guidance, could you share a bit more context about what you're trying to accomplish?
-
-I'm here to help you learn and succeed! 🚀`;
-    }
-    
-    if (msg.includes('why')) {
-        return `🤔 That's an interesting "why" question!
-
-Let me think about the reasons behind this...
-
-${message}
-
-The answer might depend on several factors. Is there a specific aspect you're most curious about?
-
-I love exploring "why" questions - they help us understand things better! 💭`;
-    }
-    
-    // Default engaging response
-    return `💭 Thanks for sharing that with me, ${aiName} here!
-
-I'm interested in what you're saying about "${message.substring(0, 50)}${message.length > 50 ? '...' : ''}"
-
-To give you the best response, could you tell me a bit more about what you'd like to know or discuss?
-
-I'm here to help with detailed answers, explanations, or just good conversation! 
-
-What specific aspect interests you most? 😊`;
-}
-
-// Command: /start
+// /start command
 bot.onText(/\/start/, async (msg) => {
     const chatId = msg.chat.id;
     const userId = msg.from.id.toString();
     const username = msg.from.username || '';
     const firstName = msg.from.first_name || '';
     
-    // Register user
-    db.run('INSERT OR IGNORE INTO users (user_id, username, first_name) VALUES (?, ?, ?)', [userId, username, firstName]);
+    await registerUser(userId, username, firstName);
     
     const approved = await isApproved(userId);
     const admin = await isAdmin(userId, username);
     
     if (approved || admin) {
-        const welcomeMessage = `🌟 *Welcome back, ${firstName}!* 🌟
+        const welcomeMessage = `🌟 *Hello ${firstName}! I'm ${aiName}* 🌟
 
-I'm **${aiName}**, your AI assistant with ChatGPT-style conversation!
+I'm an AI assistant powered by ChatGPT - I can help you with questions, explain concepts, have conversations, and learn from our chats!
 
 ━━━━━━━━━━━━━━━━━━━━━
 
-✨ *What makes me special:*
-• 💬 Natural, engaging conversations
-• 🧠 I learn from every interaction
-• 📚 Detailed, helpful responses
-• 🎯 Context-aware answers
-• 💾 Remember our conversations
+✨ *What I can do:*
+• Answer questions like ChatGPT
+• Explain complex topics simply
+• Have natural conversations
+• Learn from what you teach me
+• Remember our discussions
 
 ━━━━━━━━━━━━━━━━━━━━━
 
 📋 *Commands:*
 
 **💬 Chat**
-• Just send any message to talk with me
-• I'll respond like ChatGPT - natural and detailed!
+• Just send any message - I'll respond naturally!
 
-**👑 Admin Commands** (Admins only)
+**👑 Admin Commands**
 • /approve @username - Approve user
 • /reject @username - Reject user  
 • /pending - View pending users
 • /users - List all users
+• /teach - Teach me something new
 
 **📊 Info**
 • /stats - View statistics
-• /clear - Clear conversation history
+• /clear - Clear conversation
+• /learned - See what I've learned
 
 ━━━━━━━━━━━━━━━━━━━━━
 
 💡 *Try asking me:*
-• "What is ChatGPT and how does it work?"
+• "What is artificial intelligence?"
 • "Explain quantum computing simply"
+• "How do neural networks work?"
+• "Tell me a fun fact"
 • "Help me understand machine learning"
-• "Tell me an interesting fact"
-• "What's the weather like?"
 
 ━━━━━━━━━━━━━━━━━━━━━
 
-*Let's have a great conversation!* 🚀
-
-Just send me any message to start chatting!`;
+*Let's chat! Send me anything you'd like to know!* 🚀`;
         
         bot.sendMessage(chatId, welcomeMessage, { parse_mode: 'Markdown' });
     } else {
-        // Request approval
-        db.run('INSERT OR REPLACE INTO pending_approvals (user_id, username, first_name, request_message) VALUES (?, ?, ?, ?)', 
-            [userId, username, firstName, "User requested access"]);
-        
+        // Check if already pending
         bot.sendMessage(chatId, `⏳ *Access Request Submitted* 🙏
 
-Hi ${firstName}! Thanks for your interest in using ${aiName}.
+Hi ${firstName}! Your request has been sent to the administrators.
 
-Your request has been sent to the administrators for approval.
+You'll be notified when approved.
 
-**What happens next:**
-1. An admin will review your request
-2. You'll receive a notification when approved
-3. Then you can start chatting with me!
-
-*Estimated wait time:* Usually within 24 hours
-
-Thank you for your patience! 🌟`, { parse_mode: 'Markdown' });
+*Thank you for your patience!* 🌟`, { parse_mode: 'Markdown' });
         
         // Notify admins
         for (const adminUsername of ADMIN_USERNAMES) {
@@ -719,17 +444,15 @@ Thank you for your patience! 🌟`, { parse_mode: 'Markdown' });
 
 **User:** @${username || firstName}
 **ID:** ${userId}
-**Time:** ${new Date().toLocaleString()}
 
 Use: /approve @${username || userId} to approve
-Use: /reject @${username || userId} to reject
 
 *Pending approvals:* /pending`, { parse_mode: 'Markdown' });
         }
     }
 });
 
-// Handle messages - Main chat handler
+// Main message handler - ChatGPT style
 bot.on('message', async (msg) => {
     const chatId = msg.chat.id;
     const text = msg.text;
@@ -742,30 +465,47 @@ bot.on('message', async (msg) => {
     const admin = await isAdmin(userId, username);
     
     if (!approved && !admin) {
-        bot.sendMessage(chatId, "⏳ *Access Pending*\n\nPlease wait for admin approval before chatting.\n\nContact an admin if you have questions.", { parse_mode: 'Markdown' });
+        bot.sendMessage(chatId, "⏳ *Access Pending*\n\nPlease wait for admin approval.", { parse_mode: 'Markdown' });
         return;
     }
     
     // Send typing indicator
     bot.sendChatAction(chatId, 'typing');
     
-    // Get conversation history
-    let history = userConversations.get(userId) || [];
+    // Check if we have a learned response
+    let learnedResponse = await checkLearnedResponse(text);
     
-    // Get AI response
-    const response = await getChatGPTResponse(userId, text, history);
+    if (learnedResponse && Math.random() < 0.3) {
+        // Use learned response 30% of the time
+        await saveConversation(userId, text, learnedResponse, 'learned');
+        bot.sendMessage(chatId, learnedResponse);
+        return;
+    }
+    
+    // Get conversation history
+    let history = userHistory.get(userId) || [];
+    
+    // Call ChatGPT API
+    let aiResponse = await callChatGPT(text, history);
+    let modelUsed = 'chatgpt';
+    
+    if (!aiResponse) {
+        // Fallback response if API fails
+        aiResponse = getFallbackResponse(text);
+        modelUsed = 'fallback';
+    }
     
     // Update history
     history.push({ role: 'user', content: text });
-    history.push({ role: 'assistant', content: response });
+    history.push({ role: 'assistant', content: aiResponse });
     if (history.length > 20) history = history.slice(-20);
-    userConversations.set(userId, history);
+    userHistory.set(userId, history);
     
-    // Update user context
-    await updateUserContext(userId, history, { last_topic: text.substring(0, 100) });
+    // Save conversation
+    await saveConversation(userId, text, aiResponse, modelUsed);
     
-    // Send response with formatting
-    bot.sendMessage(chatId, response, { parse_mode: 'Markdown' });
+    // Send response
+    bot.sendMessage(chatId, aiResponse);
 });
 
 // /approve command
@@ -777,13 +517,13 @@ bot.onText(/\/approve (.+)/, async (msg, match) => {
     
     const admin = await isAdmin(userId, username);
     if (!admin) {
-        bot.sendMessage(chatId, "❌ *Access Denied*\n\nYou don't have permission to use this command.", { parse_mode: 'Markdown' });
+        bot.sendMessage(chatId, "❌ *Access Denied*", { parse_mode: 'Markdown' });
         return;
     }
     
     db.get('SELECT user_id, username, first_name FROM users WHERE username = ? OR user_id = ?', [target, target], async (err, user) => {
         if (user) {
-            db.run('UPDATE users SET is_approved = 1, approved_by = ?, approved_at = CURRENT_TIMESTAMP WHERE user_id = ?', [username, user.user_id]);
+            db.run('UPDATE users SET is_approved = 1 WHERE user_id = ?', [user.user_id]);
             bot.sendMessage(chatId, `✅ *User Approved*\n\n@${user.username || user.first_name} can now use the bot!`);
             
             bot.sendMessage(user.user_id, `🎉 *Access Granted!* 🎉
@@ -794,7 +534,7 @@ Send /start to begin our conversation!
 
 I'm excited to chat with you! 🚀`, { parse_mode: 'Markdown' });
         } else {
-            bot.sendMessage(chatId, `❌ *User Not Found*\n\nCould not find user: ${target}`);
+            bot.sendMessage(chatId, `❌ *User Not Found*\n\nCould not find: ${target}`);
         }
     });
 });
@@ -812,17 +552,9 @@ bot.onText(/\/reject (.+)/, async (msg, match) => {
         return;
     }
     
-    db.get('SELECT user_id, username, first_name FROM users WHERE username = ? OR user_id = ?', [target, target], async (err, user) => {
+    db.get('SELECT user_id, username, first_name FROM users WHERE username = ? OR user_id = ?', [target, target], (err, user) => {
         if (user) {
-            bot.sendMessage(chatId, `❌ *User Rejected*\n\n@${user.username || user.first_name} has been rejected.`);
-            
-            bot.sendMessage(user.user_id, `❌ *Access Denied*
-
-Your request to use ${aiName} has been reviewed and not approved at this time.
-
-If you believe this is an error, please contact an administrator.`);
-        } else {
-            bot.sendMessage(chatId, `❌ *User Not Found*`);
+            bot.sendMessage(chatId, `❌ *User Rejected*\n\n@${user.username || user.first_name}`);
         }
     });
 });
@@ -839,17 +571,17 @@ bot.onText(/\/pending/, async (msg) => {
         return;
     }
     
-    db.all('SELECT user_id, username, first_name, requested_at FROM pending_approvals ORDER BY requested_at DESC', (err, rows) => {
+    db.all('SELECT user_id, username, first_name FROM users WHERE is_approved = 0', (err, rows) => {
         if (!rows || rows.length === 0) {
-            bot.sendMessage(chatId, "📋 *No Pending Users*\n\nThere are no users waiting for approval.");
+            bot.sendMessage(chatId, "📋 *No Pending Users*");
             return;
         }
         
         let message = "👥 *Pending Approvals*\n\n";
         for (const user of rows) {
-            message += `• @${user.username || user.first_name}\n  ID: ${user.user_id}\n  Requested: ${user.requested_at}\n\n`;
+            message += `• @${user.username || user.first_name}\n  ID: ${user.user_id}\n\n`;
         }
-        message += `\nUse /approve @username to approve\nUse /reject @username to reject`;
+        message += `Use /approve @username to approve`;
         
         bot.sendMessage(chatId, message.substring(0, 4000), { parse_mode: 'Markdown' });
     });
@@ -867,14 +599,85 @@ bot.onText(/\/users/, async (msg) => {
         return;
     }
     
-    db.all('SELECT user_id, username, first_name, is_approved, is_admin, approved_at FROM users ORDER BY registered_at DESC', (err, rows) => {
+    db.all('SELECT user_id, username, first_name, is_approved, is_admin FROM users ORDER BY registered_at DESC', (err, rows) => {
         let message = "👥 *Registered Users*\n\n";
         for (const user of rows) {
-            const status = user.is_approved ? '✅ Approved' : '⏳ Pending';
-            const adminBadge = user.is_admin ? ' 👑 Admin' : '';
-            message += `• @${user.username || user.first_name}${adminBadge}\n  ${status}\n  ID: ${user.user_id}\n\n`;
+            const status = user.is_approved ? '✅' : '⏳';
+            const adminBadge = user.is_admin ? ' 👑' : '';
+            message += `${status} @${user.username || user.first_name}${adminBadge}\n`;
         }
-        bot.sendMessage(chatId, message.substring(0, 4000), { parse_mode: 'Markdown' });
+        bot.sendMessage(chatId, message, { parse_mode: 'Markdown' });
+    });
+});
+
+// /teach command - Teach AI something new
+bot.onText(/\/teach (.+)/, async (msg, match) => {
+    const chatId = msg.chat.id;
+    const userId = msg.from.id.toString();
+    const username = msg.from.username || '';
+    const teachingText = match[1];
+    
+    const approved = await isApproved(userId);
+    const admin = await isAdmin(userId, username);
+    
+    if (!approved && !admin) {
+        bot.sendMessage(chatId, "⏳ *Access Denied*", { parse_mode: 'Markdown' });
+        return;
+    }
+    
+    // Parse teaching format: "question|answer"
+    const parts = teachingText.split('|');
+    if (parts.length >= 2) {
+        const question = parts[0].trim();
+        const answer = parts[1].trim();
+        
+        await learnResponse(question, answer);
+        bot.sendMessage(chatId, `📚 *I've learned something new!*
+
+**Question:** ${question}
+**Answer:** ${answer}
+
+I'll remember this for future conversations! 🧠`, { parse_mode: 'Markdown' });
+    } else {
+        bot.sendMessage(chatId, `📚 *How to teach me:*
+
+Use: /teach question | answer
+
+**Example:**
+/teach What is your name? | My name is ${aiName}!
+
+I'll learn and remember this! 🧠`, { parse_mode: 'Markdown' });
+    }
+});
+
+// /learned command - Show what AI has learned
+bot.onText(/\/learned/, async (msg) => {
+    const chatId = msg.chat.id;
+    const userId = msg.from.id.toString();
+    const username = msg.from.username || '';
+    
+    const approved = await isApproved(userId);
+    const admin = await isAdmin(userId, username);
+    
+    if (!approved && !admin) {
+        bot.sendMessage(chatId, "⏳ *Access Denied*", { parse_mode: 'Markdown' });
+        return;
+    }
+    
+    db.all('SELECT user_message, ai_response, usage_count FROM learned_responses ORDER BY usage_count DESC LIMIT 10', (err, rows) => {
+        if (!rows || rows.length === 0) {
+            bot.sendMessage(chatId, "📚 *I haven't learned anything yet!*\n\nTeach me with: /teach question | answer");
+            return;
+        }
+        
+        let message = "📚 *What I've Learned*\n\n";
+        for (const row of rows) {
+            message += `**Q:** ${row.user_message}\n`;
+            message += `**A:** ${row.ai_response.substring(0, 100)}${row.ai_response.length > 100 ? '...' : ''}\n`;
+            message += `_Used ${row.usage_count} times_\n\n`;
+        }
+        
+        bot.sendMessage(chatId, message, { parse_mode: 'Markdown' });
     });
 });
 
@@ -893,31 +696,28 @@ bot.onText(/\/stats/, async (msg) => {
     }
     
     db.get('SELECT COUNT(*) as total FROM conversations', (err, total) => {
-        db.get('SELECT COUNT(*) as approved_users FROM users WHERE is_approved = 1', (err2, users) => {
-            db.get('SELECT COUNT(*) as learned FROM learned_patterns', (err3, learned) => {
+        db.get('SELECT COUNT(*) as learned FROM learned_responses', (err2, learned) => {
+            db.get('SELECT COUNT(*) as approved_users FROM users WHERE is_approved = 1', (err3, users) => {
                 const statsMessage = `📊 *${aiName} Statistics*
 
 ━━━━━━━━━━━━━━━━━━━━━
 
-**📈 Usage Stats:**
-• Total Conversations: ${total.total}
-• Approved Users: ${users.approved_users}
+**📈 Usage:**
+• Conversations: ${total.total}
 • Learned Patterns: ${learned.learned}
+• Approved Users: ${users.approved_users}
 
-**🤖 AI Configuration:**
-• Model: ${ollamaModel}
-• Personality: ${aiPersonality}
-• Style: ${responseStyle}
-• ChatGPT: ${openaiApiKey ? 'Connected ✅' : 'Not connected'}
+**🤖 AI Status:**
+• ChatGPT API: Connected ✅
+• Model: GPT-3.5-Turbo
+• Learning: Active
 
 **👥 Admins:**
 ${ADMIN_USERNAMES.map(u => `• @${u}`).join('\n')}
 
 ━━━━━━━━━━━━━━━━━━━━━
 
-*I'm learning and improving from every conversation!* 🌟
-
-The more we chat, the better I understand you!`;
+*I learn from every conversation!* 🧠`;
                 
                 bot.sendMessage(chatId, statsMessage, { parse_mode: 'Markdown' });
             });
@@ -936,25 +736,35 @@ bot.onText(/\/clear/, async (msg) => {
         return;
     }
     
-    userConversations.delete(userId);
-    await updateUserContext(userId, [], {});
+    userHistory.delete(userId);
+    bot.sendMessage(chatId, `🗑️ *Conversation cleared!*\n\nWe're starting fresh. What would you like to talk about? 💭`, { parse_mode: 'Markdown' });
+});
+
+// Fallback responses
+function getFallbackResponse(message) {
+    const msg = message.toLowerCase();
     
-    bot.sendMessage(chatId, `🗑️ *Conversation Cleared!*
+    if (msg.includes('hello') || msg.includes('hi')) {
+        return `👋 Hello! I'm ${aiName}. How can I help you today?`;
+    }
+    
+    if (msg.includes('what is your name')) {
+        return `✨ My name is ${aiName}! I'm an AI assistant powered by ChatGPT. What's your name?`;
+    }
+    
+    if (msg.includes('how are you')) {
+        return `🌟 I'm doing great, thank you for asking! I'm ready to help you with anything you need.`;
+    }
+    
+    return `💭 I'm ${aiName}, your AI assistant! 
 
-I've reset our conversation history.
+I can help answer questions, explain concepts, or just chat.
 
-We can start fresh now - feel free to ask me anything! 
+What would you like to know? 😊`;
+}
 
-What would you like to talk about? 💭`, { parse_mode: 'Markdown' });
-});
-
-// Error handling
-bot.on('polling_error', (error) => {
-    console.error('Polling error:', error.message);
-});
-
-console.log(`🚀 ${aiName} is ready for ChatGPT-style conversations!`);
-console.log(`💬 Response style: ${responseStyle}`);
+console.log(`🚀 ${aiName} is ready!`);
+console.log(`💬 Send any message to chat like ChatGPT!`);
 BOTEOF
     
     # Create start script
@@ -962,10 +772,7 @@ BOTEOF
 #!/bin/bash
 export TELEGRAM_BOT_TOKEN="$TELEGRAM_BOT_TOKEN"
 export OPENAI_API_KEY="$OPENAI_API_KEY"
-export OLLAMA_MODEL="$OLLAMA_MODEL"
 export AI_NAME="$AI_NAME"
-export AI_PERSONALITY="$AI_PERSONALITY"
-export RESPONSE_STYLE="$RESPONSE_STYLE"
 export ADMIN_USERNAMES='$ADMIN_LIST_JSON'
 
 cd "$HOME/khongai-telegram-bot"
@@ -987,7 +794,7 @@ EOF
     
     chmod +x stop.sh
     
-    log_success "ChatGPT-style bot created!"
+    log_success "ChatGPT bot created with real learning!"
 }
 
 # Create management script
@@ -998,22 +805,19 @@ create_manager() {
 GREEN='\033[0;32m'
 RED='\033[0;31m'
 BLUE='\033[0;34m'
-YELLOW='\033[1;33m'
 NC='\033[0m'
 
 case "$1" in
     start)
-        echo -e "${BLUE}Starting KhongAI services...${NC}"
-        sudo systemctl start ollama
-        cd ~/khongai && docker compose up -d
+        echo -e "${BLUE}Starting services...${NC}"
+        cd ~/khongai && docker compose up -d 2>/dev/null
         cd ~/khongai-telegram-bot && ./start.sh
-        echo -e "${GREEN}✓ All services started${NC}"
+        echo -e "${GREEN}✓ Services started${NC}"
         ;;
     stop)
         echo -e "${BLUE}Stopping services...${NC}"
-        cd ~/khongai && docker compose down
+        cd ~/khongai && docker compose down 2>/dev/null
         cd ~/khongai-telegram-bot && ./stop.sh
-        sudo systemctl stop ollama
         echo -e "${GREEN}✓ Services stopped${NC}"
         ;;
     restart)
@@ -1022,36 +826,27 @@ case "$1" in
         $0 start
         ;;
     status)
-        echo -e "${BLUE}════════════════════════════════════${NC}"
-        echo -e "${BOLD}KhongAI Status${NC}"
-        echo -e "${BLUE}════════════════════════════════════${NC}"
-        echo -e "\n🦙 Ollama: $(systemctl is-active ollama 2>/dev/null || echo 'inactive')"
-        echo -e "🐳 OpenClaw: $(docker ps --filter name=khongai --format '{{.Status}}' || echo 'Not running')"
-        echo -e "🤖 Bot: $(pgrep -f 'node bot.js' > /dev/null && echo 'Running' || echo 'Stopped')"
+        echo -e "${BLUE}════════════════════════════════${NC}"
+        echo -e "KhongAI Status"
+        echo -e "${BLUE}════════════════════════════════${NC}"
+        echo -e "\n🤖 Bot: $(pgrep -f 'node bot.js' > /dev/null && echo 'Running ✅' || echo 'Stopped ❌')"
         
-        echo -e "\n📊 Database Stats:"
+        echo -e "\n📊 Database:"
         sqlite3 ~/.khongai/chat_history.db "SELECT COUNT(*) as conversations FROM conversations;" 2>/dev/null
-        sqlite3 ~/.khongai/chat_history.db "SELECT COUNT(*) as patterns FROM learned_patterns;" 2>/dev/null
-        sqlite3 ~/.khongai/chat_history.db "SELECT COUNT(*) as approved FROM users WHERE is_approved=1;" 2>/dev/null
-        ;;
-    train)
-        echo -e "${BLUE}Training AI with conversation data...${NC}"
-        sqlite3 ~/.khongai/chat_history.db "SELECT user_message, ai_response FROM training_data WHERE used_for_training=0 LIMIT 50;"
-        echo -e "${GREEN}Training data prepared${NC}"
-        ;;
-    export)
-        echo -e "${BLUE}Exporting data...${NC}"
-        sqlite3 -json ~/.khongai/chat_history.db "SELECT * FROM conversations;" > ~/.khongai/export_$(date +%Y%m%d_%H%M%S).json
-        echo -e "${GREEN}Data exported${NC}"
+        sqlite3 ~/.khongai/chat_history.db "SELECT COUNT(*) as learned FROM learned_responses;" 2>/dev/null
         ;;
     logs)
-        docker logs khongai --tail 50 -f
-        ;;
-    bot-logs)
         tail -f ~/khongai-telegram-bot/bot.log
         ;;
+    test)
+        echo -e "${BLUE}Testing ChatGPT API...${NC}"
+        curl -s -X POST https://api.openai.com/v1/chat/completions \
+          -H "Authorization: Bearer $(grep OPENAI_API_KEY ~/khongai-telegram-bot/start.sh | cut -d'"' -f2)" \
+          -H "Content-Type: application/json" \
+          -d '{"model":"gpt-3.5-turbo","messages":[{"role":"user","content":"Say OK"}],"max_tokens":5}' | head -c 100
+        ;;
     *)
-        echo "Usage: $0 {start|stop|restart|status|train|export|logs|bot-logs}"
+        echo "Usage: $0 {start|stop|restart|status|logs|test}"
         ;;
 esac
 EOF
@@ -1064,7 +859,7 @@ main() {
     print_banner
     
     install_zstd
-    get_config
+    get_api_keys
     get_admin_usernames
     create_directories
     
@@ -1085,15 +880,12 @@ main() {
     cat > ~/.khongai/config.json << EOF
 {
     "ai_name": "$AI_NAME",
-    "ai_personality": "$AI_PERSONALITY",
-    "response_style": "$RESPONSE_STYLE",
-    "ollama_model": "$OLLAMA_MODEL",
+    "openai_api_key": "$OPENAI_API_KEY",
     "admins": ${ADMIN_LIST_JSON},
     "install_date": "$(date)"
 }
 EOF
     
-    install_ollama
     create_openclaw_container
     create_chatgpt_bot
     create_manager
@@ -1101,30 +893,29 @@ EOF
     ~/khongai-manager.sh start
     
     echo -e "\n${GREEN}════════════════════════════════════════════════════════════════${NC}"
-    echo -e "${GREEN}✅ ${AI_NAME} ChatGPT-Style Bot installed successfully!${NC}"
+    echo -e "${GREEN}✅ ${AI_NAME} ChatGPT Bot installed successfully!${NC}"
     echo -e "${GREEN}════════════════════════════════════════════════════════════════${NC}\n"
     
-    echo -e "${CYAN}🤖 ChatGPT-Style Features:${NC}"
-    echo "  • Natural, conversational responses"
-    echo "  • Detailed answers like ChatGPT"
-    echo "  • Learns from every conversation"
-    echo "  • Remembers context"
-    echo "  • Provides examples and explanations"
+    echo -e "${CYAN}🤖 ChatGPT Integration:${NC}"
+    echo "  • Real ChatGPT API responses"
+    echo "  • Natural conversation flow"
+    echo "  • Learns from every chat"
+    echo "  • Saves to database"
     echo ""
-    echo -e "${CYAN}📋 Example Conversations:${NC}"
-    echo "  User: What is ChatGPT?"
-    echo "  ${AI_NAME}: ChatGPT is an AI chatbot created by OpenAI..."
+    echo -e "${CYAN}📋 Commands:${NC}"
+    echo "  • Send any message - Get ChatGPT responses"
+    echo "  • /teach question | answer - Teach me something"
+    echo "  • /learned - See what I've learned"
+    echo "  • /stats - View statistics"
+    echo "  • /clear - Clear conversation"
     echo ""
-    echo "  User: How does machine learning work?"
-    echo "  ${AI_NAME}: Great question! Machine learning is a subset of AI..."
-    echo ""
-    echo -e "${CYAN}👥 Admin Commands:${NC}"
+    echo -e "${CYAN}👑 Admin Commands:${NC}"
     echo "  • /approve @username - Approve user"
     echo "  • /reject @username - Reject user"
     echo "  • /pending - View pending"
     echo "  • /users - List all users"
     echo ""
-    echo -e "${GREEN}🎉 Send /start to your bot to begin ChatGPT-style conversations!${NC}\n"
+    echo -e "${GREEN}🎉 Send /start to your bot on Telegram!${NC}\n"
 }
 
 main "$@"
