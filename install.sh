@@ -1,5 +1,5 @@
 #!/bin/bash
-# ClawBot Installer - Fixed File Processing
+# ClawBot Installer - Fixed Knowledge Base & Learning
 
 set -e
 
@@ -23,8 +23,8 @@ print_banner() {
     echo "║    ╚██████╗███████╗██║  ██║╚███╔███╔╝██████╔╝╚██████╔╝   ██║                 ║"
     echo "║     ╚═════╝╚══════╝╚═╝  ╚═╝ ╚══╝╚══╝ ╚═════╝  ╚═════╝    ╚═╝                 ║"
     echo "║                                                                              ║"
-    echo "║              ClawBot - Fixed PDF & File Learning                             ║"
-    echo "║                      Learn from ANY document!                                ║"
+    echo "║              ClawBot - Fixed Knowledge Base & Learning                       ║"
+    echo "║                      Learn from PDF and answer questions!                    ║"
     echo "║                                                                              ║"
     echo "╚══════════════════════════════════════════════════════════════════════════════╝"
     echo -e "${NC}"
@@ -147,9 +147,9 @@ install_ollama() {
     log_success "Ollama ready"
 }
 
-# Create ClawBot with fixed file processing
+# Create ClawBot with fixed knowledge base
 create_clawbot() {
-    log_step "Creating ClawBot with fixed file processing..."
+    log_step "Creating ClawBot with fixed knowledge base..."
 
     cd ~/clawbot-telegram
 
@@ -161,8 +161,7 @@ create_clawbot() {
     "node-telegram-bot-api": "^0.64.0",
     "axios": "^1.6.0",
     "sqlite3": "^5.1.6",
-    "pdf-parse": "^1.1.1",
-    "mammoth": "^1.4.2"
+    "pdf-parse": "^1.1.1"
   }
 }
 EOF
@@ -227,6 +226,7 @@ db.serialize(() => {
         id INTEGER PRIMARY KEY AUTOINCREMENT,
         topic TEXT,
         content TEXT,
+        keywords TEXT,
         source TEXT,
         learned_at DATETIME DEFAULT CURRENT_TIMESTAMP
     )`);
@@ -251,41 +251,42 @@ async function extractPDFText(filePath) {
     }
 }
 
-// Extract text from TXT
-async function extractTXTText(filePath) {
-    try {
-        return fs.readFileSync(filePath, 'utf8');
-    } catch (error) {
-        console.error('TXT extraction error:', error);
-        return null;
-    }
-}
-
-// Process file and extract text
-async function processFile(filePath, fileName) {
-    const ext = path.extname(fileName).toLowerCase();
+// Extract keywords from text
+function extractKeywords(text) {
+    const words = text.toLowerCase().split(/\s+/);
+    const commonWords = new Set(['the', 'a', 'an', 'and', 'or', 'but', 'in', 'on', 'at', 'to', 'for', 'of', 'with', 'by', 'is', 'are', 'was', 'were', 'be', 'been', 'being']);
+    const keywords = [];
+    const wordCount = {};
     
-    if (ext === '.pdf') {
-        return await extractPDFText(filePath);
-    } else if (ext === '.txt') {
-        return await extractTXTText(filePath);
-    } else {
-        return null;
+    for (const word of words) {
+        if (word.length > 3 && !commonWords.has(word)) {
+            wordCount[word] = (wordCount[word] || 0) + 1;
+        }
     }
+    
+    const sorted = Object.entries(wordCount).sort((a, b) => b[1] - a[1]);
+    for (let i = 0; i < Math.min(20, sorted.length); i++) {
+        keywords.push(sorted[i][0]);
+    }
+    
+    return keywords.join(', ');
 }
 
 // Learn from text
 async function learnFromText(text, source, userId) {
     return new Promise((resolve) => {
         // Split text into chunks
-        const chunks = text.match(/[^.!?]+[.!?]+/g) || [text];
+        const chunks = text.split(/\n\n|\n(?=[A-Z])/);
         let learned = 0;
         
-        for (const chunk of chunks.slice(0, 50)) {
-            if (chunk.trim().length > 30) {
-                const topic = chunk.substring(0, 100).trim();
-                db.run('INSERT INTO knowledge_base (topic, content, source) VALUES (?, ?, ?)',
-                    [topic, chunk.trim(), source], (err) => {
+        for (const chunk of chunks) {
+            if (chunk.trim().length > 50 && chunk.trim().length < 2000) {
+                const firstLine = chunk.split('\n')[0].substring(0, 100).trim();
+                const topic = firstLine;
+                const keywords = extractKeywords(chunk);
+                
+                db.run('INSERT INTO knowledge_base (topic, content, keywords, source) VALUES (?, ?, ?, ?)',
+                    [topic, chunk.trim(), keywords, source], (err) => {
                     if (!err) learned++;
                 });
             }
@@ -298,31 +299,47 @@ async function learnFromText(text, source, userId) {
 // Search knowledge base
 async function searchKnowledge(query) {
     return new Promise((resolve) => {
+        const queryLower = query.toLowerCase();
         const results = [];
-        db.all('SELECT topic, content FROM knowledge_base', (err, rows) => {
-            if (!rows) return resolve(null);
+        
+        db.all('SELECT topic, content, keywords FROM knowledge_base', (err, rows) => {
+            if (!rows || rows.length === 0) {
+                return resolve(null);
+            }
             
-            const queryLower = query.toLowerCase();
             for (const row of rows) {
-                if (row.topic.toLowerCase().includes(queryLower) || 
-                    row.content.toLowerCase().includes(queryLower)) {
-                    results.push(row.content);
-                    if (results.length >= 3) break;
+                const relevance = 
+                    (row.topic.toLowerCase().includes(queryLower) ? 10 : 0) +
+                    (row.keywords && row.keywords.includes(queryLower) ? 5 : 0) +
+                    (row.content.toLowerCase().includes(queryLower) ? 3 : 0);
+                
+                if (relevance > 0) {
+                    results.push({ content: row.content, relevance: relevance });
                 }
             }
             
-            resolve(results.length > 0 ? results.join('\n\n') : null);
+            results.sort((a, b) => b.relevance - a.relevance);
+            
+            if (results.length > 0) {
+                resolve(results.slice(0, 3).map(r => r.content).join('\n\n'));
+            } else {
+                resolve(null);
+            }
         });
     });
 }
 
 // Call ChatGPT API
-async function callChatGPT(userMessage, history) {
+async function callChatGPT(userMessage, history, context) {
     if (!openaiApiKey) return null;
     
     try {
+        const systemPrompt = `You are ${aiName}, a helpful AI assistant. 
+${context ? `Here is relevant information from your knowledge base:\n${context}\n\nUse this information to answer questions accurately.` : ''}
+Answer questions naturally and conversationally.`;
+
         const messages = [
-            { role: 'system', content: `You are ${aiName}, a helpful AI assistant. Be conversational and engaging.` },
+            { role: 'system', content: systemPrompt },
             ...history.slice(-10),
             { role: 'user', content: userMessage }
         ];
@@ -330,7 +347,7 @@ async function callChatGPT(userMessage, history) {
         const response = await axios.post('https://api.openai.com/v1/chat/completions', {
             model: 'gpt-3.5-turbo',
             messages: messages,
-            temperature: 0.8,
+            temperature: 0.7,
             max_tokens: 500
         }, {
             headers: { 'Authorization': `Bearer ${openaiApiKey}` },
@@ -344,24 +361,41 @@ async function callChatGPT(userMessage, history) {
 }
 
 // Call Ollama
-async function callOllama(userMessage, history, context = '') {
+async function callOllama(userMessage, history, context) {
     try {
         const historyText = history.slice(-5).map(h => `${h.role}: ${h.content}`).join('\n');
-        const prompt = `You are ${aiName}, a helpful AI assistant.
+        
+        let prompt = `You are ${aiName}, a helpful AI assistant. Answer questions based on your knowledge.`;
+        
+        if (context) {
+            prompt = `You are ${aiName}, a helpful AI assistant. Here is relevant information from your knowledge base:
 
-${context ? `Here is relevant information from my knowledge base:\n${context}\n\n` : ''}
+${context}
+
+Use this information to answer the user's question accurately. If the information doesn't fully answer the question, use your own knowledge as well.
+
 Previous conversation:
 ${historyText}
 
 User: ${userMessage}
 
 ${aiName}:`;
+        } else {
+            prompt = `You are ${aiName}, a helpful AI assistant.
+
+Previous conversation:
+${historyText}
+
+User: ${userMessage}
+
+${aiName}:`;
+        }
 
         const response = await axios.post('http://localhost:11434/api/generate', {
             model: ollamaModel,
             prompt: prompt,
             stream: false,
-            options: { temperature: 0.8, num_predict: 500 }
+            options: { temperature: 0.7, num_predict: 500 }
         }, { timeout: 30000 });
         
         return response.data.response.replace(`${aiName}:`, '').trim();
@@ -371,28 +405,30 @@ ${aiName}:`;
     }
 }
 
-// Get AI response
+// Get AI response with knowledge base
 async function getAIResponse(userMessage, history) {
-    // Search knowledge base first
-    const knowledge = await searchKnowledge(userMessage);
+    // Search knowledge base for relevant information
+    const relevantKnowledge = await searchKnowledge(userMessage);
+    
+    if (relevantKnowledge) {
+        console.log('Found relevant knowledge for:', userMessage.substring(0, 50));
+    }
     
     // Try ChatGPT if available
     if (openaiApiKey) {
-        const chatGPTResponse = await callChatGPT(userMessage, history);
+        const chatGPTResponse = await callChatGPT(userMessage, history, relevantKnowledge);
         if (chatGPTResponse) return { response: chatGPTResponse, model: 'chatgpt' };
     }
     
-    // Use Ollama
-    const ollamaResponse = await callOllama(userMessage, history, knowledge);
+    // Use Ollama with knowledge context
+    const ollamaResponse = await callOllama(userMessage, history, relevantKnowledge);
     if (ollamaResponse) return { response: ollamaResponse, model: 'ollama' };
     
     // Fallback
-    const fallbacks = [
-        `🦞 *snap snap* I'm ${aiName}! Ask me anything or send me files to learn!`,
-        `Hey there! ${aiName} here. What can I help you with today?`,
-        `*claw click* ${aiName} ready! Send me documents and I'll learn from them!`
-    ];
-    return { response: fallbacks[Math.floor(Math.random() * fallbacks.length)], model: 'fallback' };
+    return { 
+        response: `📚 I'm ${aiName}! I have knowledge from the files you uploaded. Try asking me something specific about what you taught me!`,
+        model: 'fallback' 
+    };
 }
 
 // User management
@@ -439,26 +475,25 @@ bot.onText(/\/start/, async (msg) => {
     if (approved || admin) {
         const welcomeMessage = `🦞 *Welcome to ${aiName}!* 🦞
 
-*claw click* I can learn from PDF and TXT files!
+I can learn from PDF files and answer questions about them!
 
 ━━━━━━━━━━━━━━━━━━━━━
 
 ✨ *What I can do:*
-• 📝 Chat naturally
 • 📚 Learn from PDF documents
-• 📖 Read and remember TXT files
-• 🧠 Search my knowledge base
+• 🧠 Answer questions based on what I learned
+• 🔍 Search my knowledge base
 
 📋 *Commands:*
-• Send any message to chat
-• Send PDF/TXT files - I'll learn
-• /knowledge <query> - Search my memory
+• Send a PDF - I'll read and learn
+• Ask questions - I'll use my knowledge
+• /knowledge <topic> - Search my memory
 • /stats - View my stats
-• /clear - Reset chat
+• /clear - Reset our chat
 
 ━━━━━━━━━━━━━━━━━━━━━
 
-*Send me a PDF or TXT to get started!* 🚀`;
+*Send me a PDF to start teaching me!* 🚀`;
 
         bot.sendMessage(chatId, welcomeMessage, { parse_mode: 'Markdown' });
     } else {
@@ -477,7 +512,7 @@ Use: /approve @${username || userId}`);
     }
 });
 
-// Handle document uploads (PDF, TXT)
+// Handle document uploads (PDF)
 bot.on('document', async (msg) => {
     const chatId = msg.chat.id;
     const userId = msg.from.id.toString();
@@ -491,8 +526,8 @@ bot.on('document', async (msg) => {
         return;
     }
     
-    if (!['.pdf', '.txt'].includes(fileExt)) {
-        bot.sendMessage(chatId, `❌ Unsupported file type: ${fileExt}\n\nPlease send PDF or TXT files only.`);
+    if (fileExt !== '.pdf') {
+        bot.sendMessage(chatId, `❌ Please send PDF files only.`);
         return;
     }
     
@@ -513,34 +548,32 @@ bot.on('document', async (msg) => {
             writer.on('error', reject);
         });
         
-        // Extract text from file
-        const extractedText = await processFile(filePath, fileName);
+        // Extract text from PDF
+        const extractedText = await extractPDFText(filePath);
         
-        if (extractedText && extractedText.length > 100) {
+        if (extractedText && extractedText.length > 200) {
             const learnedCount = await learnFromText(extractedText, fileName, userId);
             
-            const preview = extractedText.substring(0, 300);
+            const preview = extractedText.substring(0, 400);
             bot.sendMessage(chatId, `✅ *Learning Complete!* 📚
 
 **File:** ${fileName}
-**Pages/Lines:** ${Math.floor(extractedText.length / 500)} sections
-**Learned:** ${learnedCount} new facts
+**Knowledge Items:** ${learnedCount} facts learned
 
 **Preview:**
-${preview}${extractedText.length > 300 ? '...' : ''}
+${preview}${extractedText.length > 400 ? '...' : ''}
 
 *I've added this knowledge to my brain!* 🧠
 
-Try asking: /knowledge about this`);
+Now try asking me: *"What is Kali Linux?"* or *"Tell me about nmap"*`);
         } else {
-            bot.sendMessage(chatId, `⚠️ Couldn't extract text from this file.
+            bot.sendMessage(chatId, `⚠️ Couldn't extract text from this PDF.
 
 **Possible issues:**
 • PDF might be scanned images (no selectable text)
 • File might be corrupted
-• File is empty
 
-Try a different file with selectable text.`);
+**Solution:** Try a PDF with selectable text or convert to TXT first.`);
         }
         
         // Clean up
@@ -548,15 +581,15 @@ Try a different file with selectable text.`);
         
     } catch (error) {
         console.error('File processing error:', error);
-        bot.sendMessage(chatId, `❌ Error processing file. Please try again with a different file.`);
+        bot.sendMessage(chatId, `❌ Error processing file. Please try again with a different PDF.`);
     }
 });
 
 // /knowledge command - Search knowledge base
-bot.onText(/\/knowledge (.+)/, async (msg, match) => {
+bot.onText(/\/knowledge(?:\s+(.+))?/, async (msg, match) => {
     const chatId = msg.chat.id;
-    const query = match[1];
     const userId = msg.from.id.toString();
+    const query = match ? match[1] : null;
     
     const approved = await isApproved(userId);
     if (!approved) {
@@ -564,20 +597,45 @@ bot.onText(/\/knowledge (.+)/, async (msg, match) => {
         return;
     }
     
-    bot.sendMessage(chatId, `🔍 *Searching knowledge base for:* "${query}"`);
+    if (!query) {
+        // Show help for knowledge command
+        db.get('SELECT COUNT(*) as count FROM knowledge_base', (err, result) => {
+            const count = result ? result.count : 0;
+            bot.sendMessage(chatId, `📚 *Knowledge Base Help*
+
+**Usage:** /knowledge <topic or question>
+
+**Examples:**
+• /knowledge Kali Linux
+• /什么是nmap
+• /how to use apt-get
+
+**Current Knowledge:** ${count} items learned
+
+*Upload PDFs to grow my knowledge!* 🧠`, { parse_mode: 'Markdown' });
+        });
+        return;
+    }
+    
+    bot.sendMessage(chatId, `🔍 *Searching for:* "${query}"`);
     
     const knowledge = await searchKnowledge(query);
     
     if (knowledge) {
         bot.sendMessage(chatId, `📚 *Found in my memory!*
 
-${knowledge.substring(0, 1500)}
+${knowledge.substring(0, 2000)}
 
-*I learned this from uploaded files!* 🧠`);
+*I learned this from your uploaded files!* 🧠`);
     } else {
         bot.sendMessage(chatId, `📚 *No knowledge found for:* "${query}"
 
-Teach me by uploading PDF or TXT files related to this topic!`);
+**Try:**
+• Different keywords
+• Upload a PDF about this topic
+• Use /knowledge without query to see help
+
+*Send me a PDF to teach me!* 📄`);
     }
 });
 
@@ -600,7 +658,7 @@ bot.onText(/\/stats/, async (msg) => {
 **Knowledge Items:** ${knowledge.knowledge || 0}
 **AI Model:** ${openaiApiKey ? 'ChatGPT + Ollama' : 'Ollama'}
 
-*Send me PDFs to learn!* 📚🦞`;
+*Send me PDFs to learn more!* 📚🦞`;
 
             bot.sendMessage(chatId, statsMessage, { parse_mode: 'Markdown' });
         });
@@ -645,7 +703,7 @@ bot.onText(/\/approve (.+)/, async (msg, match) => {
     });
 });
 
-// Main message handler
+// Main message handler - answers questions using knowledge base
 bot.on('message', async (msg) => {
     const chatId = msg.chat.id;
     const text = msg.text;
@@ -709,7 +767,7 @@ EOF
 
     chmod +x stop.sh
 
-    log_success "ClawBot created with fixed PDF processing!"
+    log_success "ClawBot created with fixed knowledge base!"
 }
 
 # Create management script
@@ -764,7 +822,7 @@ EOF
     log_success "Management script created"
 }
 
-# Main installation
+// Main installation
 main() {
     print_banner
 
@@ -818,34 +876,32 @@ EOF
     echo -e "${GREEN}════════════════════════════════════════════════════════════════${NC}\n"
 
     echo -e "${CYAN}🦞 ClawBot Features:${NC}"
-    echo "  • 📝 Chat naturally"
     echo "  • 📚 Learn from PDF files"
-    echo "  • 📖 Read TXT documents"
-    echo "  • 🧠 Searchable knowledge base"
+    echo "  • 🧠 Answer questions based on learned knowledge"
+    echo "  • 🔍 Search knowledge base with /knowledge"
+    echo "  • 💬 Natural conversations"
     echo ""
     echo -e "${CYAN}📁 How to use:${NC}"
     echo "  1. Send a PDF file - I'll read and learn from it"
-    echo "  2. Ask questions - I'll use what I learned"
-    echo "  3. Use /knowledge <query> - Search my memory"
+    echo "  2. Ask questions - I'll use what I learned to answer"
+    echo "  3. Use /knowledge <topic> - Search my memory"
     echo ""
     echo -e "${CYAN}📋 Commands:${NC}"
-    echo "  • Send any message - Chat with me"
-    echo "  • /knowledge <query> - Search my knowledge"
-    echo "  • /stats - View statistics"
-    echo "  • /clear - Clear conversation"
+    echo "  • Send a PDF - Teach me new information"
+    echo "  • Ask a question - I'll answer using my knowledge"
+    echo "  • /knowledge <topic> - Search my knowledge base"
+    echo "  • /stats - View my statistics"
+    echo "  • /clear - Clear conversation history"
     echo ""
     echo -e "${CYAN}👑 Admin Commands:${NC}"
-    echo "  • /approve @username - Approve user"
+    echo "  • /approve @username - Approve new users"
     echo ""
     echo -e "${CYAN}🛠️ Management:${NC}"
     echo "  • ~/clawbot-manager.sh status  - Check status"
     echo "  • ~/clawbot-manager.sh logs     - View logs"
     echo "  • ~/clawbot-manager.sh knowledge - View knowledge base"
     echo ""
-    echo -e "${GREEN}🎉 Send a PDF file to your bot to start teaching it!${NC}\n"
-    
-    echo -e "${YELLOW}⚠️ Important: PDF must have selectable text (not scanned images).${NC}"
-    echo -e "${YELLOW}   For scanned PDFs, convert to text first or use TXT files.${NC}\n"
+    echo -e "${GREEN}🎉 Send a PDF file to your bot and start teaching it!${NC}\n"
 }
 
 main "$@"
