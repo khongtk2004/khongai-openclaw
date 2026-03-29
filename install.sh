@@ -1,5 +1,5 @@
 #!/bin/bash
-# KhongAI Installer - Fixed ChatGPT Integration with Learning
+# KhongAI Installer - Groq API Integration with Learning System
 
 set -e
 
@@ -23,8 +23,8 @@ print_banner() {
     echo "║   | . \ | | |  __/| (_| || | | || |_| || (_) || | | |                         ║"
     echo "║   |_|\_\|_|  \___| \__,_||_| |_| \__,_| \___/ |_| |_|                         ║"
     echo "║                                                                              ║"
-    echo "║              ChatGPT API Integration with Learning System                     ║"
-    echo "║                         by KhongAI                                            ║"
+    echo "║                 Groq API Integration with Learning System                    ║"
+    echo "║                      Fast AI Responses by KhongAI                            ║"
     echo "║                                                                              ║"
     echo "╚══════════════════════════════════════════════════════════════════════════════╝"
     echo -e "${NC}"
@@ -51,35 +51,53 @@ install_zstd() {
     fi
 }
 
-# Get ChatGPT API Key
+# Get Groq API Key
 get_api_keys() {
-    echo -e "\n${BOLD}${CYAN}🔑 ChatGPT API Configuration${NC}\n"
-    echo -e "${YELLOW}Enter your OpenAI ChatGPT API Key:${NC}"
-    echo -e "${BLUE}(Get from https://platform.openai.com/api-keys)${NC}"
-    echo -e "${BLUE}(This is REQUIRED for ChatGPT-style responses)${NC}"
-    read -p "➤ " OPENAI_API_KEY
+    echo -e "\n${BOLD}${CYAN}🔑 Groq API Configuration${NC}\n"
+    echo -e "${YELLOW}Enter your Groq API Key:${NC}"
+    echo -e "${BLUE}(Get from https://console.groq.com/keys)${NC}"
+    echo -e "${BLUE}(This is REQUIRED for fast AI responses)${NC}"
+    read -p "➤ " GROQ_API_KEY
     
-    if [[ -z "$OPENAI_API_KEY" ]]; then
-        log_error "ChatGPT API Key is required for proper responses!"
+    if [[ -z "$GROQ_API_KEY" ]]; then
+        log_error "Groq API Key is required for proper responses!"
         exit 1
     fi
     
     # Test the API key
-    log_info "Testing API key..."
-    TEST_RESPONSE=$(curl -s -X POST https://api.openai.com/v1/chat/completions \
-      -H "Authorization: Bearer $OPENAI_API_KEY" \
+    log_info "Testing Groq API key..."
+    TEST_RESPONSE=$(curl -s -X POST https://api.groq.com/openai/v1/chat/completions \
+      -H "Authorization: Bearer $GROQ_API_KEY" \
       -H "Content-Type: application/json" \
       -d '{
-        "model": "gpt-3.5-turbo",
+        "model": "mixtral-8x7b-32768",
         "messages": [{"role": "user", "content": "Say OK if you work"}],
         "max_tokens": 5
       }' 2>/dev/null)
     
     if echo "$TEST_RESPONSE" | grep -q "OK"; then
-        log_success "ChatGPT API key works!"
+        log_success "Groq API key works! (Fast AI responses ready)"
     else
         log_warning "API key test failed, but continuing..."
     fi
+    
+    # Model selection
+    echo -e "\n${BOLD}${CYAN}🤖 Groq Model Selection${NC}\n"
+    echo -e "${YELLOW}Select Groq model:${NC}"
+    echo "  1) mixtral-8x7b-32768 (Fast, intelligent - Recommended)"
+    echo "  2) llama3-70b-8192 (Most powerful, slower)"
+    echo "  3) llama3-8b-8192 (Fast, lightweight)"
+    echo "  4) gemma2-9b-it (Google's model)"
+    read -p "Select [1-4, default: 1]: " model_choice
+    
+    case $model_choice in
+        2) GROQ_MODEL="llama3-70b-8192" ;;
+        3) GROQ_MODEL="llama3-8b-8192" ;;
+        4) GROQ_MODEL="gemma2-9b-it" ;;
+        *) GROQ_MODEL="mixtral-8x7b-32768" ;;
+    esac
+    
+    log_success "Groq model selected: $GROQ_MODEL"
     
     # AI Personality
     echo -e "\n${BOLD}${CYAN}🎭 AI Personality${NC}\n"
@@ -150,21 +168,20 @@ EOF
     log_success "OpenClaw container started"
 }
 
-# Create ChatGPT bot with real learning
-create_chatgpt_bot() {
-    log_step "Creating ChatGPT-powered bot with learning..."
+# Create Groq bot with real learning
+create_groq_bot() {
+    log_step "Creating Groq-powered bot with learning..."
     
     cd ~/khongai-telegram-bot
     
     cat > package.json << 'EOF'
 {
-  "name": "khongai-chatgpt-bot",
-  "version": "5.0.0",
+  "name": "khongai-groq-bot",
+  "version": "6.0.0",
   "dependencies": {
     "node-telegram-bot-api": "^0.64.0",
     "axios": "^1.6.0",
-    "sqlite3": "^5.1.6",
-    "fs": "^0.0.1-security"
+    "sqlite3": "^5.1.6"
   }
 }
 EOF
@@ -188,7 +205,8 @@ const path = require('path');
 
 // Configuration
 const token = process.env.TELEGRAM_BOT_TOKEN;
-const openaiApiKey = process.env.OPENAI_API_KEY;
+const groqApiKey = process.env.GROQ_API_KEY;
+const groqModel = process.env.GROQ_MODEL || 'mixtral-8x7b-32768';
 const aiName = process.env.AI_NAME || 'KhongAI';
 const ADMIN_USERNAMES = JSON.parse(process.env.ADMIN_USERNAMES || '["khongtk2004"]');
 
@@ -214,6 +232,7 @@ db.serialize(() => {
         user_message TEXT,
         ai_response TEXT,
         model_used TEXT,
+        response_time INTEGER,
         timestamp DATETIME DEFAULT CURRENT_TIMESTAMP
     )`);
     
@@ -226,28 +245,41 @@ db.serialize(() => {
         effectiveness INTEGER DEFAULT 0,
         created_at DATETIME DEFAULT CURRENT_TIMESTAMP
     )`);
+    
+    db.run(`CREATE TABLE IF NOT EXISTS feedback (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        user_id TEXT,
+        message TEXT,
+        rating INTEGER,
+        timestamp DATETIME DEFAULT CURRENT_TIMESTAMP
+    )`);
 });
 
 // Store conversation history per user
 const userHistory = new Map();
 
-console.log(`🤖 ${aiName} ChatGPT Bot Started`);
-console.log(`ChatGPT API: ${openaiApiKey ? 'Connected ✅' : 'Not connected ❌'}`);
+console.log(`🤖 ${aiName} Groq AI Bot Started`);
+console.log(`Groq Model: ${groqModel}`);
+console.log(`Groq API: ${groqApiKey ? 'Connected ✅' : 'Not connected ❌'}`);
 console.log(`Admins: ${ADMIN_USERNAMES.join(', ')}`);
 
-// Helper: Call ChatGPT API
-async function callChatGPT(userMessage, conversationHistory) {
+// Helper: Call Groq API (super fast!)
+async function callGroqAPI(userMessage, conversationHistory) {
+    const startTime = Date.now();
+    
     try {
         // Build messages array with history
         const messages = [
             {
                 role: 'system',
-                content: `You are ${aiName}, a helpful, friendly AI assistant. 
-You respond naturally like ChatGPT - with detailed, informative, and conversational answers.
+                content: `You are ${aiName}, a helpful, friendly AI assistant powered by Groq's fast AI.
+You respond naturally like a professional AI - with detailed, informative, and conversational answers.
 Use emojis occasionally to be friendly.
 Break down complex topics simply.
 Ask clarifying questions when needed.
-Be engaging and helpful.`
+Be engaging and helpful.
+Provide examples when relevant.
+Keep responses concise but informative.`
             }
         ];
         
@@ -268,24 +300,31 @@ Be engaging and helpful.`
             content: userMessage
         });
         
-        const response = await axios.post('https://api.openai.com/v1/chat/completions', {
-            model: 'gpt-3.5-turbo',
+        const response = await axios.post('https://api.groq.com/openai/v1/chat/completions', {
+            model: groqModel,
             messages: messages,
             temperature: 0.8,
-            max_tokens: 500,
-            presence_penalty: 0.6,
-            frequency_penalty: 0.5
+            max_tokens: 600,
+            top_p: 0.9,
+            frequency_penalty: 0.5,
+            presence_penalty: 0.5
         }, {
             headers: {
-                'Authorization': `Bearer ${openaiApiKey}`,
+                'Authorization': `Bearer ${groqApiKey}`,
                 'Content-Type': 'application/json'
             },
             timeout: 30000
         });
         
-        return response.data.choices[0].message.content;
+        const responseTime = Date.now() - startTime;
+        console.log(`Groq API response time: ${responseTime}ms`);
+        
+        return {
+            content: response.data.choices[0].message.content,
+            responseTime: responseTime
+        };
     } catch (error) {
-        console.error('ChatGPT API Error:', error.response?.data?.error?.message || error.message);
+        console.error('Groq API Error:', error.response?.data?.error?.message || error.message);
         return null;
     }
 }
@@ -302,7 +341,18 @@ async function checkLearnedResponse(userMessage) {
                     db.run('UPDATE learned_responses SET usage_count = usage_count + 1 WHERE user_message = ?', [msg]);
                     resolve(row.ai_response);
                 } else {
-                    resolve(null);
+                    // Check for partial matches
+                    db.all('SELECT user_message, ai_response FROM learned_responses WHERE effectiveness > 0', (err, rows) => {
+                        if (rows) {
+                            for (const row of rows) {
+                                if (msg.includes(row.user_message) || row.user_message.includes(msg)) {
+                                    resolve(row.ai_response);
+                                    return;
+                                }
+                            }
+                        }
+                        resolve(null);
+                    });
                 }
             }
         );
@@ -322,11 +372,22 @@ async function learnResponse(userMessage, aiResponse) {
 }
 
 // Helper: Save conversation
-async function saveConversation(userId, userMessage, aiResponse, modelUsed) {
+async function saveConversation(userId, userMessage, aiResponse, modelUsed, responseTime) {
     return new Promise((resolve) => {
         db.run(
-            'INSERT INTO conversations (user_id, user_message, ai_response, model_used) VALUES (?, ?, ?, ?)',
-            [userId, userMessage, aiResponse, modelUsed],
+            'INSERT INTO conversations (user_id, user_message, ai_response, model_used, response_time) VALUES (?, ?, ?, ?, ?)',
+            [userId, userMessage, aiResponse, modelUsed, responseTime || 0],
+            (err) => resolve()
+        );
+    });
+}
+
+// Helper: Save feedback
+async function saveFeedback(userId, message, rating) {
+    return new Promise((resolve) => {
+        db.run(
+            'INSERT INTO feedback (user_id, message, rating) VALUES (?, ?, ?)',
+            [userId, message, rating],
             (err) => resolve()
         );
     });
@@ -363,7 +424,7 @@ async function registerUser(userId, username, firstName) {
     return new Promise((resolve) => {
         db.run(
             'INSERT OR IGNORE INTO users (user_id, username, first_name) VALUES (?, ?, ?)',
-            [userId, username, firstName],
+            [userId, username || '', firstName || ''],
             (err) => resolve()
         );
     });
@@ -384,35 +445,39 @@ bot.onText(/\/start/, async (msg) => {
     if (approved || admin) {
         const welcomeMessage = `🌟 *Hello ${firstName}! I'm ${aiName}* 🌟
 
-I'm an AI assistant powered by ChatGPT - I can help you with questions, explain concepts, have conversations, and learn from our chats!
+I'm an AI assistant powered by **Groq's fast AI** - I respond instantly with detailed, helpful answers!
 
 ━━━━━━━━━━━━━━━━━━━━━
 
-✨ *What I can do:*
-• Answer questions like ChatGPT
-• Explain complex topics simply
-• Have natural conversations
-• Learn from what you teach me
-• Remember our discussions
+✨ *What makes me special:*
+• ⚡ Super fast responses (Groq AI)
+• 🧠 I learn from every conversation
+• 💾 Remembers our discussions
+• 📚 Can be taught new things
+• 🎯 Context-aware answers
 
 ━━━━━━━━━━━━━━━━━━━━━
 
 📋 *Commands:*
 
 **💬 Chat**
-• Just send any message - I'll respond naturally!
+• Just send any message - I'll respond instantly!
 
 **👑 Admin Commands**
 • /approve @username - Approve user
 • /reject @username - Reject user  
 • /pending - View pending users
 • /users - List all users
-• /teach - Teach me something new
+
+**📚 Learning Commands**
+• /teach question | answer - Teach me something
+• /learned - See what I've learned
+• /feedback good/bad - Rate my response
 
 **📊 Info**
 • /stats - View statistics
 • /clear - Clear conversation
-• /learned - See what I've learned
+• /model - Show current AI model
 
 ━━━━━━━━━━━━━━━━━━━━━
 
@@ -429,7 +494,6 @@ I'm an AI assistant powered by ChatGPT - I can help you with questions, explain 
         
         bot.sendMessage(chatId, welcomeMessage, { parse_mode: 'Markdown' });
     } else {
-        // Check if already pending
         bot.sendMessage(chatId, `⏳ *Access Request Submitted* 🙏
 
 Hi ${firstName}! Your request has been sent to the administrators.
@@ -452,7 +516,7 @@ Use: /approve @${username || userId} to approve
     }
 });
 
-// Main message handler - ChatGPT style
+// Main message handler - Groq AI style
 bot.on('message', async (msg) => {
     const chatId = msg.chat.id;
     const text = msg.text;
@@ -477,7 +541,7 @@ bot.on('message', async (msg) => {
     
     if (learnedResponse && Math.random() < 0.3) {
         // Use learned response 30% of the time
-        await saveConversation(userId, text, learnedResponse, 'learned');
+        await saveConversation(userId, text, learnedResponse, 'learned', 0);
         bot.sendMessage(chatId, learnedResponse);
         return;
     }
@@ -485,11 +549,16 @@ bot.on('message', async (msg) => {
     // Get conversation history
     let history = userHistory.get(userId) || [];
     
-    // Call ChatGPT API
-    let aiResponse = await callChatGPT(text, history);
-    let modelUsed = 'chatgpt';
+    // Call Groq API
+    const groqResult = await callGroqAPI(text, history);
+    let aiResponse = '';
+    let modelUsed = 'groq';
+    let responseTime = 0;
     
-    if (!aiResponse) {
+    if (groqResult) {
+        aiResponse = groqResult.content;
+        responseTime = groqResult.responseTime;
+    } else {
         // Fallback response if API fails
         aiResponse = getFallbackResponse(text);
         modelUsed = 'fallback';
@@ -502,7 +571,7 @@ bot.on('message', async (msg) => {
     userHistory.set(userId, history);
     
     // Save conversation
-    await saveConversation(userId, text, aiResponse, modelUsed);
+    await saveConversation(userId, text, aiResponse, modelUsed, responseTime);
     
     // Send response
     bot.sendMessage(chatId, aiResponse);
@@ -681,6 +750,65 @@ bot.onText(/\/learned/, async (msg) => {
     });
 });
 
+// /feedback command
+bot.onText(/\/feedback (.+)/, async (msg, match) => {
+    const chatId = msg.chat.id;
+    const userId = msg.from.id.toString();
+    const rating = match[1].toLowerCase();
+    
+    const approved = await isApproved(userId);
+    if (!approved) {
+        bot.sendMessage(chatId, "⏳ *Access Denied*", { parse_mode: 'Markdown' });
+        return;
+    }
+    
+    let ratingValue = 0;
+    if (rating === 'good' || rating === 'great' || rating === '👍') {
+        ratingValue = 5;
+        bot.sendMessage(chatId, "🙏 *Thank you for the positive feedback!*\n\nI'll keep learning to serve you better! 🌟");
+    } else if (rating === 'bad' || rating === 'poor' || rating === '👎') {
+        ratingValue = 1;
+        bot.sendMessage(chatId, "🙏 *Thanks for the feedback!*\n\nI'll work on improving my responses! 💪");
+    } else {
+        bot.sendMessage(chatId, "📝 *Feedback Format*\n\nUse: /feedback good or /feedback bad");
+        return;
+    }
+    
+    // Get last conversation
+    db.get('SELECT user_message, ai_response FROM conversations WHERE user_id = ? ORDER BY timestamp DESC LIMIT 1', [userId], async (err, row) => {
+        if (row) {
+            await saveFeedback(userId, row.user_message, ratingValue);
+            if (ratingValue === 5) {
+                await learnResponse(row.user_message, row.ai_response);
+            }
+        }
+    });
+});
+
+// /model command
+bot.onText(/\/model/, async (msg) => {
+    const chatId = msg.chat.id;
+    const userId = msg.from.id.toString();
+    
+    const approved = await isApproved(userId);
+    if (!approved) {
+        bot.sendMessage(chatId, "⏳ *Access Denied*", { parse_mode: 'Markdown' });
+        return;
+    }
+    
+    bot.sendMessage(chatId, `🤖 *Current AI Model*
+
+**Model:** ${groqModel}
+**Provider:** Groq Cloud
+**Speed:** Ultra-fast (< 1 second)
+**Features:** 
+• Context-aware responses
+• Learning capabilities
+• Conversation memory
+
+*Powered by Groq's LPU technology* ⚡`, { parse_mode: 'Markdown' });
+});
+
 // /stats command
 bot.onText(/\/stats/, async (msg) => {
     const chatId = msg.chat.id;
@@ -698,7 +826,8 @@ bot.onText(/\/stats/, async (msg) => {
     db.get('SELECT COUNT(*) as total FROM conversations', (err, total) => {
         db.get('SELECT COUNT(*) as learned FROM learned_responses', (err2, learned) => {
             db.get('SELECT COUNT(*) as approved_users FROM users WHERE is_approved = 1', (err3, users) => {
-                const statsMessage = `📊 *${aiName} Statistics*
+                db.get('SELECT AVG(response_time) as avg_time FROM conversations WHERE response_time > 0', (err4, time) => {
+                    const statsMessage = `📊 *${aiName} Statistics*
 
 ━━━━━━━━━━━━━━━━━━━━━
 
@@ -707,10 +836,15 @@ bot.onText(/\/stats/, async (msg) => {
 • Learned Patterns: ${learned.learned}
 • Approved Users: ${users.approved_users}
 
+**⚡ Performance:**
+• AI Model: ${groqModel}
+• Avg Response: ${Math.round(time?.avg_time || 0)}ms
+• Provider: Groq Cloud
+
 **🤖 AI Status:**
-• ChatGPT API: Connected ✅
-• Model: GPT-3.5-Turbo
+• Groq API: Connected ✅
 • Learning: Active
+• Memory: Enabled
 
 **👥 Admins:**
 ${ADMIN_USERNAMES.map(u => `• @${u}`).join('\n')}
@@ -718,8 +852,9 @@ ${ADMIN_USERNAMES.map(u => `• @${u}`).join('\n')}
 ━━━━━━━━━━━━━━━━━━━━━
 
 *I learn from every conversation!* 🧠`;
-                
-                bot.sendMessage(chatId, statsMessage, { parse_mode: 'Markdown' });
+                    
+                    bot.sendMessage(chatId, statsMessage, { parse_mode: 'Markdown' });
+                });
             });
         });
     });
@@ -745,33 +880,34 @@ function getFallbackResponse(message) {
     const msg = message.toLowerCase();
     
     if (msg.includes('hello') || msg.includes('hi')) {
-        return `👋 Hello! I'm ${aiName}. How can I help you today?`;
+        return `👋 Hello! I'm ${aiName}, your AI assistant powered by Groq's fast AI. How can I help you today?`;
     }
     
     if (msg.includes('what is your name')) {
-        return `✨ My name is ${aiName}! I'm an AI assistant powered by ChatGPT. What's your name?`;
+        return `✨ My name is ${aiName}! I'm an AI assistant running on Groq's ultra-fast infrastructure. What's your name?`;
     }
     
     if (msg.includes('how are you')) {
-        return `🌟 I'm doing great, thank you for asking! I'm ready to help you with anything you need.`;
+        return `🌟 I'm doing great, thank you for asking! I'm running at lightning speed on Groq's LPU. Ready to help you with anything!`;
     }
     
-    return `💭 I'm ${aiName}, your AI assistant! 
+    return `💭 I'm ${aiName}, your AI assistant powered by Groq!
 
 I can help answer questions, explain concepts, or just chat.
 
 What would you like to know? 😊`;
 }
 
-console.log(`🚀 ${aiName} is ready!`);
-console.log(`💬 Send any message to chat like ChatGPT!`);
+console.log(`🚀 ${aiName} is ready with Groq AI!`);
+console.log(`💬 Send any message - I'll respond super fast!`);
 BOTEOF
     
     # Create start script
     cat > start.sh << EOF
 #!/bin/bash
 export TELEGRAM_BOT_TOKEN="$TELEGRAM_BOT_TOKEN"
-export OPENAI_API_KEY="$OPENAI_API_KEY"
+export GROQ_API_KEY="$GROQ_API_KEY"
+export GROQ_MODEL="$GROQ_MODEL"
 export AI_NAME="$AI_NAME"
 export ADMIN_USERNAMES='$ADMIN_LIST_JSON'
 
@@ -779,7 +915,7 @@ cd "$HOME/khongai-telegram-bot"
 pkill -f "node bot.js" 2>/dev/null
 nohup node bot.js > bot.log 2>&1 &
 echo \$! > bot.pid
-echo "✅ ${AI_NAME} bot started!"
+echo "✅ ${AI_NAME} bot started with Groq AI!"
 sleep 2
 tail -3 bot.log
 EOF
@@ -794,7 +930,7 @@ EOF
     
     chmod +x stop.sh
     
-    log_success "ChatGPT bot created with real learning!"
+    log_success "Groq AI bot created with learning capabilities!"
 }
 
 # Create management script
@@ -805,11 +941,12 @@ create_manager() {
 GREEN='\033[0;32m'
 RED='\033[0;31m'
 BLUE='\033[0;34m'
+YELLOW='\033[1;33m'
 NC='\033[0m'
 
 case "$1" in
     start)
-        echo -e "${BLUE}Starting services...${NC}"
+        echo -e "${BLUE}Starting KhongAI services...${NC}"
         cd ~/khongai && docker compose up -d 2>/dev/null
         cd ~/khongai-telegram-bot && ./start.sh
         echo -e "${GREEN}✓ Services started${NC}"
@@ -831,27 +968,40 @@ case "$1" in
         echo -e "${BLUE}════════════════════════════════${NC}"
         echo -e "\n🤖 Bot: $(pgrep -f 'node bot.js' > /dev/null && echo 'Running ✅' || echo 'Stopped ❌')"
         
-        echo -e "\n📊 Database:"
+        echo -e "\n📊 Database Stats:"
         sqlite3 ~/.khongai/chat_history.db "SELECT COUNT(*) as conversations FROM conversations;" 2>/dev/null
         sqlite3 ~/.khongai/chat_history.db "SELECT COUNT(*) as learned FROM learned_responses;" 2>/dev/null
+        sqlite3 ~/.khongai/chat_history.db "SELECT COUNT(*) as users FROM users WHERE is_approved=1;" 2>/dev/null
         ;;
     logs)
         tail -f ~/khongai-telegram-bot/bot.log
         ;;
     test)
-        echo -e "${BLUE}Testing ChatGPT API...${NC}"
-        curl -s -X POST https://api.openai.com/v1/chat/completions \
-          -H "Authorization: Bearer $(grep OPENAI_API_KEY ~/khongai-telegram-bot/start.sh | cut -d'"' -f2)" \
+        echo -e "${BLUE}Testing Groq API...${NC}"
+        curl -s -X POST https://api.groq.com/openai/v1/chat/completions \
+          -H "Authorization: Bearer $(grep GROQ_API_KEY ~/khongai-telegram-bot/start.sh | cut -d'"' -f2)" \
           -H "Content-Type: application/json" \
-          -d '{"model":"gpt-3.5-turbo","messages":[{"role":"user","content":"Say OK"}],"max_tokens":5}' | head -c 100
+          -d '{"model":"mixtral-8x7b-32768","messages":[{"role":"user","content":"Say OK"}],"max_tokens":5}'
+        ;;
+    train)
+        echo -e "${BLUE}Training AI with conversation data...${NC}"
+        sqlite3 ~/.khongai/chat_history.db "SELECT user_message, ai_response FROM conversations WHERE id NOT IN (SELECT id FROM learned_responses) LIMIT 10;"
+        echo -e "${GREEN}Training data prepared${NC}"
+        ;;
+    export)
+        echo -e "${BLUE}Exporting data...${NC}"
+        sqlite3 -json ~/.khongai/chat_history.db "SELECT * FROM conversations;" > ~/.khongai/export_$(date +%Y%m%d_%H%M%S).json
+        echo -e "${GREEN}Data exported to ~/.khongai/export_*.json${NC}"
         ;;
     *)
-        echo "Usage: $0 {start|stop|restart|status|logs|test}"
+        echo "Usage: $0 {start|stop|restart|status|logs|test|train|export}"
+        exit 1
         ;;
 esac
 EOF
     
     chmod +x ~/khongai-manager.sh
+    log_success "Management script created"
 }
 
 # Main installation
@@ -870,7 +1020,7 @@ main() {
         if [[ "$TELEGRAM_BOT_TOKEN" =~ ^[0-9]+:[A-Za-z0-9_-]+$ ]]; then
             break
         else
-            log_error "Invalid token format"
+            log_error "Invalid token format. Get it from @BotFather"
         fi
     done
     
@@ -880,42 +1030,53 @@ main() {
     cat > ~/.khongai/config.json << EOF
 {
     "ai_name": "$AI_NAME",
-    "openai_api_key": "$OPENAI_API_KEY",
+    "groq_api_key": "$GROQ_API_KEY",
+    "groq_model": "$GROQ_MODEL",
     "admins": ${ADMIN_LIST_JSON},
     "install_date": "$(date)"
 }
 EOF
     
     create_openclaw_container
-    create_chatgpt_bot
+    create_groq_bot
     create_manager
     
     ~/khongai-manager.sh start
     
     echo -e "\n${GREEN}════════════════════════════════════════════════════════════════${NC}"
-    echo -e "${GREEN}✅ ${AI_NAME} ChatGPT Bot installed successfully!${NC}"
+    echo -e "${GREEN}✅ ${AI_NAME} Groq AI Bot installed successfully!${NC}"
     echo -e "${GREEN}════════════════════════════════════════════════════════════════${NC}\n"
     
-    echo -e "${CYAN}🤖 ChatGPT Integration:${NC}"
-    echo "  • Real ChatGPT API responses"
+    echo -e "${CYAN}⚡ Groq AI Features:${NC}"
+    echo "  • Ultra-fast responses (Groq LPU)"
     echo "  • Natural conversation flow"
     echo "  • Learns from every chat"
     echo "  • Saves to database"
+    echo "  • Context memory"
     echo ""
-    echo -e "${CYAN}📋 Commands:${NC}"
-    echo "  • Send any message - Get ChatGPT responses"
+    echo -e "${CYAN}📋 Available Commands:${NC}"
+    echo "  • Send any message - Get instant AI responses"
     echo "  • /teach question | answer - Teach me something"
     echo "  • /learned - See what I've learned"
+    echo "  • /feedback good/bad - Rate my response"
     echo "  • /stats - View statistics"
+    echo "  • /model - Show current AI model"
     echo "  • /clear - Clear conversation"
     echo ""
     echo -e "${CYAN}👑 Admin Commands:${NC}"
     echo "  • /approve @username - Approve user"
     echo "  • /reject @username - Reject user"
-    echo "  • /pending - View pending"
+    echo "  • /pending - View pending users"
     echo "  • /users - List all users"
     echo ""
-    echo -e "${GREEN}🎉 Send /start to your bot on Telegram!${NC}\n"
+    echo -e "${CYAN}🛠️ Management Commands:${NC}"
+    echo "  • ~/khongai-manager.sh status  - Check status"
+    echo "  • ~/khongai-manager.sh logs     - View bot logs"
+    echo "  • ~/khongai-manager.sh test     - Test Groq API"
+    echo "  • ~/khongai-manager.sh export   - Export data"
+    echo ""
+    echo -e "${GREEN}🎉 Send /start to your bot on Telegram to begin!${NC}"
+    echo -e "${YELLOW}💡 Your bot will respond super fast with Groq AI!${NC}\n"
 }
 
 main "$@"
