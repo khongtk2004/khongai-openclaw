@@ -827,7 +827,7 @@ EOF
     log_success "Management script created"
 }
 
-# Main installation
+# Main installation function
 main() {
     print_banner
 
@@ -909,4 +909,5 @@ EOF
     echo -e "${GREEN}🎉 Send a PDF file to your bot and start teaching it!${NC}\n"
 }
 
+# Run main function
 main "$@"
