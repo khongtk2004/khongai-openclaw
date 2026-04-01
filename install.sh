@@ -2,7 +2,8 @@
 set -euo pipefail
 
 # OpenClaw Installer for macOS and Linux with Khong AI integration
-# Usage: curl -fsSL --proto '=https' --tlsv1.2 https://openclaw.ai/install.sh | bash
+# GitHub: https://github.com/khongtk2004/khongai-openclaw
+# Usage: bash <(curl -fsSL https://raw.githubusercontent.com/khongtk2004/khongai-openclaw/main/install.sh)
 
 BOLD='\033[1m'
 ACCENT='\033[38;2;255;77;77m'       # coral-bright  #ff4d4d
@@ -29,7 +30,12 @@ ${MUTED}              Empowering your shell with local intelligence${NC}
 ${GOLD}                    Made with 🦞 for Khong${NC}
 "
 
-DEFAULT_TAGLINE="All your chats, one OpenClaw with Khong AI."
+# Repository configuration
+REPO_OWNER="khongtk2004"
+REPO_NAME="khongai-openclaw"
+REPO_BRANCH="main"
+REPO_URL="https://github.com/${REPO_OWNER}/${REPO_NAME}.git"
+RAW_URL="https://raw.githubusercontent.com/${REPO_OWNER}/${REPO_NAME}/${REPO_BRANCH}"
 
 ORIGINAL_PATH="${PATH:-}"
 
@@ -278,8 +284,16 @@ print_gum_status() {
 # System-specific model recommendations
 get_system_model_recommendation() {
     local total_ram total_cores
-    total_ram=$(grep MemTotal /proc/meminfo 2>/dev/null | awk '{print $2}' || echo "0")
-    total_cores=$(nproc 2>/dev/null || echo "1")
+    if [[ "$OS" == "linux" ]]; then
+        total_ram=$(grep MemTotal /proc/meminfo 2>/dev/null | awk '{print $2}' || echo "0")
+        total_cores=$(nproc 2>/dev/null || echo "1")
+    elif [[ "$OS" == "macos" ]]; then
+        total_ram=$(sysctl -n hw.memsize 2>/dev/null | awk '{print $1/1024}' || echo "0")
+        total_cores=$(sysctl -n hw.ncpu 2>/dev/null || echo "1")
+    else
+        total_ram="0"
+        total_cores="1"
+    fi
     
     total_ram_gb=$((total_ram / 1024 / 1024))
     
@@ -334,11 +348,21 @@ setup_ollama_with_model() {
         ((attempt++))
     done
     
-    # Detect system specs and recommend model
+    # Detect system specs
     local total_ram total_cores cpu_model
-    total_ram=$(grep MemTotal /proc/meminfo 2>/dev/null | awk '{print $2}' || echo "0")
-    total_cores=$(nproc 2>/dev/null || echo "1")
-    cpu_model=$(grep "model name" /proc/cpuinfo 2>/dev/null | head -1 | cut -d: -f2 | xargs || echo "Unknown")
+    if [[ "$OS" == "linux" ]]; then
+        total_ram=$(grep MemTotal /proc/meminfo 2>/dev/null | awk '{print $2}' || echo "0")
+        total_cores=$(nproc 2>/dev/null || echo "1")
+        cpu_model=$(grep "model name" /proc/cpuinfo 2>/dev/null | head -1 | cut -d: -f2 | xargs || echo "Unknown")
+    elif [[ "$OS" == "macos" ]]; then
+        total_ram=$(sysctl -n hw.memsize 2>/dev/null | awk '{print $1/1024}' || echo "0")
+        total_cores=$(sysctl -n hw.ncpu 2>/dev/null || echo "1")
+        cpu_model=$(sysctl -n machdep.cpu.brand_string 2>/dev/null || echo "Apple Silicon")
+    else
+        total_ram="0"
+        total_cores="1"
+        cpu_model="Unknown"
+    fi
     total_ram_gb=$((total_ram / 1024 / 1024))
     
     echo ""
@@ -443,7 +467,9 @@ setup_ollama_with_model() {
   "khong_ai": {
     "enabled": true,
     "model": "$selected_model",
-    "system_prompt": "You are Khong AI, a helpful terminal assistant integrated with OpenClaw. You help users with command line tasks, automation, and general questions."
+    "system_prompt": "You are Khong AI, a helpful terminal assistant integrated with OpenClaw. You help users with command line tasks, automation, and general questions.",
+    "github_repo": "${REPO_URL}",
+    "version": "${OPENCLAW_VERSION:-latest}"
   }
 }
 EOF
@@ -471,6 +497,8 @@ EOF
     echo -e "  ${CYAN}ollama list${NC}"
     echo -e "  ${MUTED}# Test with OpenClaw:${NC}"
     echo -e "  ${CYAN}openclaw chat --model ${selected_model}${NC}"
+    echo -e "  ${MUTED}# Get help from Khong AI:${NC}"
+    echo -e "  ${CYAN}openclaw --help${NC}"
     
     # Return model name for use in other functions
     echo "$selected_model"
@@ -491,6 +519,7 @@ print_installer_banner() {
     echo -e "$KHONG_BANNER"
     echo -e "${INFO}${TAGLINE}${NC}"
     echo -e "${PURPLE}🤖 Powered by Khong AI • Intelligent Terminal Assistant • Ollama Integrated${NC}"
+    echo -e "${MUTED}📦 GitHub: ${REPO_URL}${NC}"
     echo ""
 }
 
@@ -602,12 +631,13 @@ show_footer_links() {
     local faq_url="https://docs.openclaw.ai/start/faq"
     if [[ -n "$GUM" ]]; then
         local content
-        content="$(printf '%s\n%s\n%s' "Need help?" "FAQ: ${faq_url}" "Ollama: https://ollama.ai")"
+        content="$(printf '%s\n%s\n%s\n%s' "Need help?" "FAQ: ${faq_url}" "Ollama: https://ollama.ai" "GitHub: ${REPO_URL}")"
         ui_panel "$content"
     else
         echo ""
         echo -e "FAQ: ${INFO}${faq_url}${NC}"
         echo -e "Ollama: ${INFO}https://ollama.ai${NC}"
+        echo -e "GitHub: ${INFO}${REPO_URL}${NC}"
     fi
 }
 
@@ -1100,6 +1130,9 @@ TAGLINES+=("We ship features faster than Apple ships calculator updates.")
 TAGLINES+=("Your AI assistant, now without the \$3,499 headset.")
 TAGLINES+=("Think different. Actually think.")
 TAGLINES+=("Ah, the fruit tree company! 🍎")
+TAGLINES+=("Khong AI: Your personal terminal intelligence, powered by local AI.")
+TAGLINES+=("Made with 🦞 for Khong - Because your terminal deserves a brain.")
+TAGLINES+=("The smartest shell you'll ever meet. And it runs locally!")
 
 HOLIDAY_NEW_YEAR="New Year's Day: New year, new config—same old EADDRINUSE, but this time we resolve it like grown-ups."
 HOLIDAY_LUNAR_NEW_YEAR="Lunar New Year: May your builds be lucky, your branches prosperous, and your merge conflicts chased away with fireworks."
@@ -1161,7 +1194,7 @@ pick_tagline() {
     append_holiday_taglines
     local count=${#TAGLINES[@]}
     if [[ "$count" -eq 0 ]]; then
-        echo "$DEFAULT_TAGLINE"
+        echo "Khong AI: Your intelligent terminal assistant, powered by local AI."
         return
     fi
     if [[ -n "${OPENCLAW_TAGLINE_INDEX:-}" ]]; then
@@ -1195,13 +1228,33 @@ SELECTED_NODE_BIN=""
 PNPM_CMD=()
 HELP=0
 SKIP_OLLAMA="${SKIP_OLLAMA:-0}"
+OS=""
+detect_os_or_die() {
+    local os_name
+    os_name="$(uname -s 2>/dev/null || true)"
+    case "$os_name" in
+        Darwin)
+            OS="macos"
+            ;;
+        Linux)
+            OS="linux"
+            ;;
+        *)
+            ui_error "Unsupported OS: ${os_name}"
+            exit 1
+            ;;
+    esac
+    ui_info "Detected OS: $OS"
+}
 
 print_usage() {
     cat <<EOF
 OpenClaw installer with Khong AI and Ollama (macOS + Linux)
 
+GitHub: ${REPO_URL}
+
 Usage:
-  curl -fsSL --proto '=https' --tlsv1.2 https://openclaw.ai/install.sh | bash -s -- [options]
+  bash <(curl -fsSL ${RAW_URL}/install.sh) [options]
 
 Options:
   --install-method, --method npm|git   Install via npm (default) or from a git checkout
@@ -1233,9 +1286,10 @@ Environment variables:
   SKIP_OLLAMA=1                        Skip Ollama setup
 
 Examples:
-  curl -fsSL --proto '=https' --tlsv1.2 https://openclaw.ai/install.sh | bash
-  curl -fsSL --proto '=https' --tlsv1.2 https://openclaw.ai/install.sh | bash -s -- --no-onboard
-  curl -fsSL --proto '=https' --tlsv1.2 https://openclaw.ai/install.sh | bash -s -- --skip-ollama
+  bash <(curl -fsSL ${RAW_URL}/install.sh)
+  bash <(curl -fsSL ${RAW_URL}/install.sh) -- --no-onboard
+  bash <(curl -fsSL ${RAW_URL}/install.sh) -- --skip-ollama
+  bash <(curl -fsSL ${RAW_URL}/install.sh) -- --git --dir ~/my-openclaw
 EOF
 }
 
@@ -1426,7 +1480,7 @@ print_homebrew_admin_fix() {
     echo "  2) Ask an Administrator to grant admin rights, then sign out/in:"
     echo "     sudo dseditgroup -o edit -a ${current_user} -t user admin"
     echo "Then retry:"
-    echo "  curl -fsSL https://openclaw.ai/install.sh | bash"
+    echo "  bash <(curl -fsSL ${RAW_URL}/install.sh)"
 }
 
 install_homebrew() {
@@ -2199,7 +2253,7 @@ resolve_openclaw_bin() {
 
 install_openclaw_from_git() {
     local repo_dir="$1"
-    local repo_url="https://github.com/openclaw/openclaw.git"
+    local repo_url="${REPO_URL}"
 
     if [[ -d "$repo_dir/.git" ]]; then
         ui_info "Installing OpenClaw from git checkout: ${repo_dir}"
@@ -2686,6 +2740,7 @@ main() {
         echo -e "  ${CYAN}ollama run ${selected_model}${NC}  - Chat with Khong AI directly"
         echo -e "  ${CYAN}openclaw chat${NC}             - Use Khong AI in OpenClaw"
         echo -e "  ${CYAN}openclaw onboard${NC}          - Complete OpenClaw setup"
+        echo -e "  ${CYAN}openclaw --help${NC}           - Get help"
         echo ""
     fi
 
@@ -2728,6 +2783,9 @@ main() {
             "The lobster has landed. Your terminal will never be the same."
             "All done! I promise to only judge your code a little bit."
             "Khong AI is ready to assist you. Let's make magic happen! ✨"
+            "Your terminal just got a brain upgrade. Khong AI is here to help!"
+            "AI-powered shell? Yes please! Khong AI is ready when you are."
+            "Installation complete! Your personal AI assistant is now online."
         )
         local completion_message
         completion_message="${completion_messages[RANDOM % ${#completion_messages[@]}]}"
@@ -2740,7 +2798,7 @@ main() {
         ui_kv "Checkout" "$final_git_dir"
         ui_kv "Wrapper" "$HOME/.local/bin/openclaw"
         ui_kv "Update command" "openclaw update --restart"
-        ui_kv "Switch to npm" "curl -fsSL --proto '=https' --tlsv1.2 https://openclaw.ai/install.sh | bash -s -- --install-method npm"
+        ui_kv "Switch to npm" "bash <(curl -fsSL ${RAW_URL}/install.sh) -- --install-method npm"
     elif [[ "$is_upgrade" == "true" ]]; then
         ui_info "Upgrade complete"
         if [[ -r /dev/tty && -w /dev/tty ]]; then
