@@ -2,7 +2,6 @@
 set -euo pipefail
 
 # OpenClaw Installer for macOS and Linux with Khong AI integration
-# Usage: curl -fsSL --proto '=https' --tlsv1.2 https://openclaw.ai/install.sh | bash
 
 BOLD='\033[1m'
 ACCENT='\033[38;2;255;77;77m'       # coral-bright  #ff4d4d
