@@ -61,7 +61,7 @@ Control and configure your AI assistant via Telegram commands from anywhere
 
 ## 🚀 Quick Install
 
-### 🐧 Linux / macOS
+### 🐧 Linux Spp Centos x86_64
 
 ```bash
 bash <(curl -fsSL https://raw.githubusercontent.com/khongtk2004/khongai-openclaw/main/install.sh)
